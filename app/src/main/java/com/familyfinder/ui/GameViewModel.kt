@@ -1,0 +1,101 @@
+package com.familyfinder.ui
+
+import android.app.Application
+import android.media.MediaPlayer
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.familyfinder.data.FamilyDatabase
+import com.familyfinder.data.FamilyMember
+import com.familyfinder.data.FamilyRepository
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+
+enum class GameResult { NONE, CORRECT, INCORRECT }
+
+class GameViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val repository = FamilyRepository(
+        FamilyDatabase.getDatabase(application).familyDao()
+    )
+
+    private val _currentSet = MutableStateFlow<List<FamilyMember>>(emptyList())
+    val currentSet: StateFlow<List<FamilyMember>> = _currentSet
+
+    private val _targetMember = MutableStateFlow<FamilyMember?>(null)
+    val targetMember: StateFlow<FamilyMember?> = _targetMember
+
+    private val _gameResult = MutableStateFlow(GameResult.NONE)
+    val gameResult: StateFlow<GameResult> = _gameResult
+
+    private val _memberCount = MutableStateFlow(0)
+    val memberCount: StateFlow<Int> = _memberCount
+
+    private val _selectedMemberId = MutableStateFlow<Int?>(null)
+    val selectedMemberId: StateFlow<Int?> = _selectedMemberId
+
+    private var mediaPlayer: MediaPlayer? = null
+
+    init {
+        viewModelScope.launch {
+            repository.allMembers.collect { members ->
+                _memberCount.value = members.size
+            }
+        }
+    }
+
+    fun startGame() {
+        viewModelScope.launch {
+            val members = repository.allMembers.first()
+            if (members.size < 4) return@launch
+
+            val set = members.shuffled().take(4)
+            _currentSet.value = set
+            _targetMember.value = set.random()
+            _gameResult.value = GameResult.NONE
+            _selectedMemberId.value = null
+        }
+    }
+
+    fun playQuestion() {
+        val target = _targetMember.value ?: return
+        playAudio(target.questionAudioPath)
+    }
+
+    fun selectMember(member: FamilyMember) {
+        if (_gameResult.value != GameResult.NONE) return
+
+        _selectedMemberId.value = member.id
+        val isCorrect = member.id == _targetMember.value?.id
+
+        if (isCorrect) {
+            _gameResult.value = GameResult.CORRECT
+            _targetMember.value?.let { playAudio(it.correctAudioPath) }
+        } else {
+            _gameResult.value = GameResult.INCORRECT
+            playAudio(member.incorrectAudioPath)
+        }
+    }
+
+    private fun playAudio(path: String) {
+        mediaPlayer?.release()
+        mediaPlayer = null
+
+        try {
+            mediaPlayer = MediaPlayer().apply {
+                setDataSource(path)
+                prepare()
+                start()
+                setOnCompletionListener { release() }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        mediaPlayer?.release()
+    }
+}
