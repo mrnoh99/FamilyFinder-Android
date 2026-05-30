@@ -1,10 +1,10 @@
 package com.familyfinder.ui
 
 import android.app.Application
-import android.media.MediaRecorder
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.familyfinder.audio.WavRecorder
 import com.familyfinder.data.FamilyDatabase
 import com.familyfinder.data.FamilyMember
 import com.familyfinder.data.FamilyRepository
@@ -48,8 +48,9 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
     private val _saveSuccess = MutableStateFlow(false)
     val saveSuccess: StateFlow<Boolean> = _saveSuccess
 
-    private var mediaRecorder: MediaRecorder? = null
-    private var tempAudioFile: File? = null
+    private val recorder = WavRecorder(application)
+    private var pendingType: RecordingType? = null
+    private var pendingFile: File? = null
 
     enum class RecordingType { QUESTION, CORRECT, INCORRECT }
 
@@ -62,57 +63,41 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun startRecording(type: RecordingType) {
+        if (_isRecording.value) return
         val context = getApplication<Application>()
-        stopRecording()
 
-        val file = File(context.filesDir, "temp_${type.name.lowercase()}_${System.currentTimeMillis()}.m4a")
-        tempAudioFile = file
+        val file = File(context.filesDir, "audio_${type.name.lowercase()}_${System.currentTimeMillis()}.wav")
 
-        try {
-            mediaRecorder = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                MediaRecorder(context)
-            } else {
-                @Suppress("DEPRECATION")
-                MediaRecorder()
-            }.apply {
-                setAudioSource(MediaRecorder.AudioSource.MIC)
-                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setOutputFile(file.absolutePath)
-                prepare()
-                start()
-            }
+        if (recorder.startRecording(viewModelScope)) {
+            pendingType = type
+            pendingFile = file
             _isRecording.value = true
             _currentRecordingType.value = type
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
 
     fun stopRecording() {
-        val wasRecording = _isRecording.value
-        val recordingType = _currentRecordingType.value
-
-        try {
-            mediaRecorder?.apply {
-                stop()
-                release()
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        mediaRecorder = null
-
-        if (wasRecording && recordingType != null) {
-            when (recordingType) {
-                RecordingType.QUESTION -> _questionAudioPath.value = tempAudioFile?.absolutePath
-                RecordingType.CORRECT -> _correctAudioPath.value = tempAudioFile?.absolutePath
-                RecordingType.INCORRECT -> _incorrectAudioPath.value = tempAudioFile?.absolutePath
-            }
-        }
+        if (!_isRecording.value) return
+        val type = pendingType
+        val file = pendingFile
 
         _isRecording.value = false
         _currentRecordingType.value = null
+        pendingType = null
+        pendingFile = null
+
+        if (type == null || file == null) return
+
+        viewModelScope.launch {
+            val ok = recorder.stopAndSave(file)
+            if (ok) {
+                when (type) {
+                    RecordingType.QUESTION -> _questionAudioPath.value = file.absolutePath
+                    RecordingType.CORRECT -> _correctAudioPath.value = file.absolutePath
+                    RecordingType.INCORRECT -> _incorrectAudioPath.value = file.absolutePath
+                }
+            }
+        }
     }
 
     fun saveMember() {
@@ -170,6 +155,6 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
 
     override fun onCleared() {
         super.onCleared()
-        stopRecording()
+        recorder.release()
     }
 }
