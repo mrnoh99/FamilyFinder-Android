@@ -1,11 +1,14 @@
 package com.familyfinder.ui
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.media.MediaPlayer
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -30,10 +33,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
@@ -56,8 +60,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -123,9 +129,16 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
         permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
     }
 
-    val photoLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri: Uri? -> viewModel.setPhotoUri(uri) }
+    // 갤러리(시스템 포토 피커): 선택 후 자동으로 이 화면으로 복귀
+    val galleryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? -> if (uri != null) viewModel.setPhotoUri(uri) }
+
+    // 카메라 촬영: 촬영한 사진을 임시 파일에 저장 후 이 화면으로 복귀
+    var cameraUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success: Boolean -> if (success) cameraUri?.let { viewModel.setPhotoUri(it) } }
 
     LaunchedEffect(Unit) {
         permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
@@ -297,13 +310,34 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                 }
-                Button(
-                    onClick = { photoLauncher.launch("image/*") },
-                    modifier = Modifier.fillMaxWidth()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.AddAPhoto, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(if (photoUri == null) "사진 선택" else "사진 변경")
+                    Button(
+                        onClick = {
+                            galleryLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.PhotoLibrary, contentDescription = null)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("갤러리")
+                    }
+                    Button(
+                        onClick = {
+                            val uri = createCameraImageUri(context)
+                            cameraUri = uri
+                            cameraLauncher.launch(uri)
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.PhotoCamera, contentDescription = null)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("카메라")
+                    }
                 }
             }
 
@@ -448,6 +482,12 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
+}
+
+/** 카메라 촬영 결과를 저장할 임시 파일의 FileProvider Uri를 만든다. */
+private fun createCameraImageUri(context: Context): Uri {
+    val file = File(context.cacheDir, "camera_${System.currentTimeMillis()}.jpg")
+    return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
 }
 
 @Composable
