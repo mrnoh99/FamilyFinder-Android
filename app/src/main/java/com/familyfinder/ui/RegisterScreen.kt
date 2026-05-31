@@ -43,7 +43,6 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
-import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
@@ -60,7 +59,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -418,21 +416,18 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                RecordingButton(
+                ReactionAudioPanel(
                     label = "질문 녹음",
+                    example = "해성아, 엄마 어딨어?",
                     isCurrentlyRecording = isRecording && currentRecordingType == RegisterViewModel.RecordingType.QUESTION,
                     hasRecording = questionAudioPath != null,
                     audioPath = questionAudioPath,
                     hasRecordPermission = hasRecordPermission,
                     onRequestPermission = onRequestPermission,
                     onHoldStart = { viewModel.startRecording(RegisterViewModel.RecordingType.QUESTION) },
-                    onHoldEnd = viewModel::stopRecording
+                    onHoldEnd = viewModel::stopRecording,
+                    onRevertToTts = { viewModel.revertQuestionToTts() }
                 )
-                TextButton(onClick = { viewModel.revertQuestionToTts() }) {
-                    Icon(Icons.Default.SmartToy, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("TTS(기계음)로 되돌리기")
-                }
             }
 
             // 입력 상태 체크리스트 — 무엇이 채워졌는지 한눈에 보여줌
@@ -770,105 +765,4 @@ private fun ReactionAudioPanel(
     }
 }
 
-/**
- * Hold-to-record control matching the NumberCount app: recording runs only while
- * the button is held down and stops (trimming + saving) the moment it is released.
- */
-@Composable
-fun RecordingButton(
-    label: String,
-    isCurrentlyRecording: Boolean,
-    hasRecording: Boolean,
-    audioPath: String?,
-    hasRecordPermission: () -> Boolean,
-    onRequestPermission: () -> Unit,
-    onHoldStart: () -> Boolean,
-    onHoldEnd: () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        val containerColor =
-            if (isCurrentlyRecording) Color(0xFFE53935) else MaterialTheme.colorScheme.primary
 
-        Card(
-            modifier = Modifier
-                .weight(1f)
-                .pointerInput(Unit) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        down.consume()
-                        val started = if (hasRecordPermission()) {
-                            onHoldStart()
-                        } else {
-                            onRequestPermission()
-                            false
-                        }
-                        try {
-                            waitForUpOrCancellation()
-                        } finally {
-                            if (started) onHoldEnd()
-                        }
-                    }
-                },
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = containerColor)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(horizontal = 16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Mic,
-                        contentDescription = label,
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Text(
-                        text = when {
-                            isCurrentlyRecording -> "녹음 중..."
-                            hasRecording -> "다시 녹음 (누르는 동안)"
-                            else -> "누르는 동안 녹음"
-                        },
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-        }
-
-        if (hasRecording && audioPath != null && !isCurrentlyRecording) {
-            IconButton(
-                onClick = {
-                    try {
-                        MediaPlayer().apply {
-                            setDataSource(audioPath)
-                            prepare()
-                            start()
-                            setOnCompletionListener { release() }
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-            ) {
-                Icon(
-                    Icons.Default.PlayArrow,
-                    contentDescription = "재생",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-        }
-    }
-}
