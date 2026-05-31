@@ -190,49 +190,33 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                Text(
-                    text = "정답 반응  ·  예: \"잘 했어요! 맞아요!\"",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                RecordingButton(
-                    label = "정답 반응 녹음",
+                ReactionAudioPanel(
+                    label = "정답 반응",
+                    example = "잘 했어요! 맞아요!",
                     isCurrentlyRecording = isRecording && currentRecordingType == RegisterViewModel.RecordingType.CORRECT,
                     hasRecording = correctAudioPath != null,
                     audioPath = correctAudioPath,
                     hasRecordPermission = hasRecordPermission,
                     onRequestPermission = onRequestPermission,
                     onHoldStart = { viewModel.startRecording(RegisterViewModel.RecordingType.CORRECT) },
-                    onHoldEnd = viewModel::stopRecording
+                    onHoldEnd = viewModel::stopRecording,
+                    onRevertToTts = { viewModel.revertCorrectToTts() }
                 )
-                TextButton(onClick = { viewModel.revertCorrectToTts() }) {
-                    Icon(Icons.Default.SmartToy, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("TTS(기계음)로 되돌리기")
-                }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                Text(
-                    text = "오답 반응  ·  예: \"아닌데~ 다시 봐봐!\"",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                RecordingButton(
-                    label = "오답 반응 녹음",
+                ReactionAudioPanel(
+                    label = "오답 반응",
+                    example = "아닌데~ 다시 봐봐!",
                     isCurrentlyRecording = isRecording && currentRecordingType == RegisterViewModel.RecordingType.INCORRECT,
                     hasRecording = incorrectAudioPath != null,
                     audioPath = incorrectAudioPath,
                     hasRecordPermission = hasRecordPermission,
                     onRequestPermission = onRequestPermission,
                     onHoldStart = { viewModel.startRecording(RegisterViewModel.RecordingType.INCORRECT) },
-                    onHoldEnd = viewModel::stopRecording
+                    onHoldEnd = viewModel::stopRecording,
+                    onRevertToTts = { viewModel.revertIncorrectToTts() }
                 )
-                TextButton(onClick = { viewModel.revertIncorrectToTts() }) {
-                    Icon(Icons.Default.SmartToy, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("TTS(기계음)로 되돌리기")
-                }
             }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
@@ -660,6 +644,128 @@ fun SectionCard(
                 }
             }
             content()
+        }
+    }
+}
+
+/**
+ * Reaction audio panel (정답/오답 반응):
+ * - No recording → status "없음 (TTS)" + full-width hold-to-record button
+ * - Has recording → status "저장됨" + [듣기] [TTS로 돌아가기] row + hold-to-record button below
+ */
+@Composable
+private fun ReactionAudioPanel(
+    label: String,
+    example: String,
+    isCurrentlyRecording: Boolean,
+    hasRecording: Boolean,
+    audioPath: String?,
+    hasRecordPermission: () -> Boolean,
+    onRequestPermission: () -> Unit,
+    onHoldStart: () -> Boolean,
+    onHoldEnd: () -> Unit,
+    onRevertToTts: () -> Unit
+) {
+    val primary = MaterialTheme.colorScheme.primary
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = "$label  ·  예: \"$example\"",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Text(
+            text = if (hasRecording) "저장됨" else "없음 (TTS)",
+            fontSize = 12.sp,
+            color = if (hasRecording) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        if (hasRecording && audioPath != null && !isCurrentlyRecording) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        try {
+                            MediaPlayer().apply {
+                                setDataSource(audioPath)
+                                prepare()
+                                start()
+                                setOnCompletionListener { release() }
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = primary),
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("듣기", fontWeight = FontWeight.SemiBold)
+                }
+
+                Button(
+                    onClick = onRevertToTts,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFE0E0E0),
+                        contentColor = Color(0xFF555555)
+                    ),
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Text("TTS로 돌아가기", fontSize = 13.sp)
+                }
+            }
+        }
+
+        // Hold-to-record button (always visible)
+        val recordBg = if (isCurrentlyRecording) Color(0xFFE53935) else primary.copy(alpha = 0.12f)
+        val recordTextColor = if (isCurrentlyRecording) Color.White else primary
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        down.consume()
+                        val started = if (hasRecordPermission()) {
+                            onHoldStart()
+                        } else {
+                            onRequestPermission()
+                            false
+                        }
+                        try {
+                            waitForUpOrCancellation()
+                        } finally {
+                            if (started) onHoldEnd()
+                        }
+                    }
+                },
+            shape = RoundedCornerShape(50),
+            colors = CardDefaults.cardColors(containerColor = recordBg)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (isCurrentlyRecording) "녹음 중..." else "누르는 동안 녹음",
+                    color = recordTextColor,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
     }
 }
