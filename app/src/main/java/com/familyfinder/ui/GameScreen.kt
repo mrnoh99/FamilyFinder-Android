@@ -222,6 +222,8 @@ private fun ResultOverlay(result: GameResult, interactive: Boolean, onNext: () -
     }
     if (resId == 0) return
 
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     // 아래 사진이 비치는 옅은 스크림 + 반투명 글래스 패널.
     // 음성이 끝나기 전(interactive=false)에는 터치를 막는다.
     Box(
@@ -234,51 +236,116 @@ private fun ResultOverlay(result: GameResult, interactive: Boolean, onNext: () -
             },
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth(0.96f)
-                .clip(RoundedCornerShape(28.dp))
-                .background(Color.White.copy(alpha = 0.94f))
-                .border(2.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
-                .padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            if (result == GameResult.CORRECT) {
-                // 한글 문구로 영문 "PRAISE"를 대체하고, 이미지 위쪽 영문 부분은 크롭해 가린다.
-                Text(
-                    text = "참 잘했어요!",
-                    fontSize = 44.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color(0xFFE65100)
-                )
-                Image(
-                    painter = painterResource(resId),
-                    contentDescription = "정답",
-                    contentScale = ContentScale.Crop,
-                    alignment = Alignment.BottomCenter,
+        if (isLandscape) {
+            // 가로 모드: 이미지(좌) + 텍스트·버튼(우) 을 fillMaxHeight로 제한해 화면 밖으로 나가지 않게 한다.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth(0.96f)
+                    .fillMaxHeight(0.90f)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Color.White.copy(alpha = 0.94f))
+                    .border(2.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // 왼쪽: 이미지
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.92f)
-                        .aspectRatio(1.45f)
-                        .clipToBounds()
-                )
-            } else {
-                Image(
-                    painter = painterResource(resId),
-                    contentDescription = "오답",
-                    modifier = Modifier.fillMaxWidth(0.55f)
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (result == GameResult.CORRECT) {
+                        Image(
+                            painter = painterResource(resId),
+                            contentDescription = "정답",
+                            contentScale = ContentScale.Crop,
+                            alignment = Alignment.BottomCenter,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clipToBounds()
+                        )
+                    } else {
+                        Image(
+                            painter = painterResource(resId),
+                            contentDescription = "오답",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxHeight(0.85f)
+                        )
+                    }
+                }
+                // 오른쪽: 텍스트 + 다음 버튼
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    if (result == GameResult.CORRECT) {
+                        Text(
+                            text = "참 잘했어요!",
+                            fontSize = 30.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFFE65100),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    if (interactive) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        NextButton(onClick = onNext)
+                    }
+                }
+            }
+        } else {
+            // 세로 모드: 기존 수직 레이아웃
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth(0.96f)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Color.White.copy(alpha = 0.94f))
+                    .border(2.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (result == GameResult.CORRECT) {
+                    // 한글 문구로 영문 "PRAISE"를 대체하고, 이미지 위쪽 영문 부분은 크롭해 가린다.
+                    Text(
+                        text = "참 잘했어요!",
+                        fontSize = 44.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFFE65100)
+                    )
+                    Image(
+                        painter = painterResource(resId),
+                        contentDescription = "정답",
+                        contentScale = ContentScale.Crop,
+                        alignment = Alignment.BottomCenter,
+                        modifier = Modifier
+                            .fillMaxWidth(0.92f)
+                            .aspectRatio(1.45f)
+                            .clipToBounds()
+                    )
+                } else {
+                    Image(
+                        painter = painterResource(resId),
+                        contentDescription = "오답",
+                        modifier = Modifier.fillMaxWidth(0.55f)
+                    )
+                }
+            }
+
+            // 음성이 끝나 터치가 가능해지면 btn_blue(다음)를 최상위로 띄운다.
+            if (interactive) {
+                NextButton(
+                    onClick = onNext,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 36.dp)
                 )
             }
-        }
-
-        // 음성이 끝나 터치가 가능해지면 btn_blue(다음)를 최상위로 띄운다.
-        if (interactive) {
-            NextButton(
-                onClick = onNext,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 36.dp)
-            )
         }
     }
 }
