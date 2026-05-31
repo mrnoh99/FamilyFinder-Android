@@ -36,6 +36,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedMemberId = MutableStateFlow<Int?>(null)
     val selectedMemberId: StateFlow<Int?> = _selectedMemberId
 
+    // 한 번이라도 게임을 시작했으면 시작 화면의 버튼을 "다음 문제"로 보여준다.
+    private val _hasPlayed = MutableStateFlow(false)
+    val hasPlayed: StateFlow<Boolean> = _hasPlayed
+
     private var mediaPlayer: MediaPlayer? = null
 
     init {
@@ -53,7 +57,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** 진행 중이던 게임을 비우고 "게임 시작" 화면 상태로 되돌린다. */
-    private fun resetToStart() {
+    fun resetToStart() {
         mediaPlayer?.release()
         mediaPlayer = null
         _currentSet.value = emptyList()
@@ -67,6 +71,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val members = repository.allMembers.first()
             if (members.size < 4) return@launch
 
+            _hasPlayed.value = true
             val set = members.shuffled().take(4)
             val target = set.random()
             _currentSet.value = set

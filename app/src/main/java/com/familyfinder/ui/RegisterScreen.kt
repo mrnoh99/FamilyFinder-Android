@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
@@ -205,7 +206,9 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     onHoldEnd = viewModel::stopRecording
                 )
                 TextButton(onClick = { viewModel.revertCorrectToTts() }) {
-                    Text("🔊 TTS(기계음)로 되돌리기")
+                    Icon(Icons.Default.SmartToy, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("TTS(기계음)로 되돌리기")
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -226,7 +229,9 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     onHoldEnd = viewModel::stopRecording
                 )
                 TextButton(onClick = { viewModel.revertIncorrectToTts() }) {
-                    Text("🔊 TTS(기계음)로 되돌리기")
+                    Icon(Icons.Default.SmartToy, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("TTS(기계음)로 되돌리기")
                 }
             }
 
@@ -440,7 +445,9 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     onHoldEnd = viewModel::stopRecording
                 )
                 TextButton(onClick = { viewModel.revertQuestionToTts() }) {
-                    Text("🔊 TTS(기계음)로 되돌리기")
+                    Icon(Icons.Default.SmartToy, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("TTS(기계음)로 되돌리기")
                 }
             }
 

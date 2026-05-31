@@ -75,9 +75,17 @@ fun GameScreen(viewModel: GameViewModel) {
     val gameResult by viewModel.gameResult.collectAsStateWithLifecycle()
     val memberCount by viewModel.memberCount.collectAsStateWithLifecycle()
     val selectedMemberId by viewModel.selectedMemberId.collectAsStateWithLifecycle()
+    val hasPlayed by viewModel.hasPlayed.collectAsStateWithLifecycle()
 
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val answered = gameResult != GameResult.NONE
+
+    // 게임 화면에 들어올 때마다(등록 화면 등에서 돌아오면):
+    // - 한 번이라도 플레이했으면 다음 문제(사진 그리드)를 바로 제시
+    // - 아직 한 번도 안 했으면 "게임 시작" 화면을 보여줌
+    LaunchedEffect(Unit) {
+        if (hasPlayed) viewModel.startGame() else viewModel.resetToStart()
+    }
 
     Box(
         modifier = Modifier
@@ -107,13 +115,31 @@ fun GameScreen(viewModel: GameViewModel) {
             }
 
             isLandscape -> {
-                // 가로 모드: 왼쪽 컨트롤 + 오른쪽 2x2 그리드
+                // 가로 모드: 왼쪽 2x2 그리드 + 오른쪽 컨트롤
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(16.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (currentSet.size == 4 && targetMember != null) {
+                            SquarePhotoGrid(
+                                members = currentSet,
+                                selectedMemberId = selectedMemberId,
+                                targetMemberId = targetMember!!.id,
+                                gameResult = gameResult,
+                                onSelectMember = viewModel::selectMember
+                            )
+                        } else {
+                            StartPanel(onStart = { viewModel.startGame() }, continuing = hasPlayed)
+                        }
+                    }
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -132,24 +158,6 @@ fun GameScreen(viewModel: GameViewModel) {
                         // 답을 고른 뒤: 다음 문제 버튼
                         if (answered) {
                             NextButton(onClick = { viewModel.startGame() })
-                        }
-                    }
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (currentSet.size == 4 && targetMember != null) {
-                            SquarePhotoGrid(
-                                members = currentSet,
-                                selectedMemberId = selectedMemberId,
-                                targetMemberId = targetMember!!.id,
-                                gameResult = gameResult,
-                                onSelectMember = viewModel::selectMember
-                            )
-                        } else {
-                            StartPanel(onStart = { viewModel.startGame() })
                         }
                     }
                 }
@@ -187,7 +195,7 @@ fun GameScreen(viewModel: GameViewModel) {
                                 onSelectMember = viewModel::selectMember
                             )
                         } else {
-                            StartPanel(onStart = { viewModel.startGame() })
+                            StartPanel(onStart = { viewModel.startGame() }, continuing = hasPlayed)
                         }
                     }
                     // 답을 고른 뒤: 다음 문제 버튼
@@ -212,33 +220,33 @@ private fun GameTitle() {
 }
 
 @Composable
-private fun StartButton(onClick: () -> Unit) {
+private fun StartButton(onClick: () -> Unit, continuing: Boolean) {
     Button(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .height(62.dp),
-        shape = RoundedCornerShape(31.dp),
+            .height(84.dp),
+        shape = RoundedCornerShape(42.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.primary
         )
     ) {
         Icon(
-            Icons.Default.PlayArrow,
+            if (continuing) Icons.Default.NavigateNext else Icons.Default.PlayArrow,
             contentDescription = null,
-            modifier = Modifier.size(32.dp)
+            modifier = Modifier.size(56.dp)
         )
         Spacer(modifier = Modifier.width(12.dp))
         Text(
-            text = "게임 시작",
-            fontSize = 22.sp,
+            text = if (continuing) "다음" else "시작",
+            fontSize = 30.sp,
             fontWeight = FontWeight.Bold
         )
     }
 }
 
 @Composable
-private fun StartPanel(onStart: () -> Unit) {
+private fun StartPanel(onStart: () -> Unit, continuing: Boolean) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -246,15 +254,16 @@ private fun StartPanel(onStart: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        StartHint()
-        StartButton(onClick = onStart)
+        StartHint(continuing)
+        StartButton(onClick = onStart, continuing = continuing)
     }
 }
 
 @Composable
-private fun StartHint() {
+private fun StartHint(continuing: Boolean) {
     Text(
-        text = "아래 \"게임 시작\"을 눌러\n가족 찾기를 시작하세요!",
+        text = if (continuing) "\"다음 문제\"를 눌러\n계속 진행하세요!"
+        else "아래 \"게임 시작\"을 눌러\n가족 찾기를 시작하세요!",
         fontSize = 20.sp,
         fontWeight = FontWeight.Bold,
         textAlign = TextAlign.Center,
@@ -268,16 +277,21 @@ private fun NextButton(onClick: () -> Unit) {
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .height(54.dp),
+            .height(84.dp),
+        shape = RoundedCornerShape(42.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.secondary
         )
     ) {
-        Icon(Icons.Default.NavigateNext, contentDescription = null)
-        Spacer(modifier = Modifier.width(8.dp))
+        Icon(
+            Icons.Default.NavigateNext,
+            contentDescription = null,
+            modifier = Modifier.size(56.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
         Text(
-            text = "다음 문제",
-            fontSize = 18.sp,
+            text = "다음",
+            fontSize = 30.sp,
             fontWeight = FontWeight.Bold
         )
     }
