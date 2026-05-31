@@ -27,9 +27,10 @@ object CueSounds {
     }
 
     fun buzzFile(context: Context): File {
-        val f = File(context.filesDir, "cue_buzz.wav")
+        val f = File(context.filesDir, "cue_bip.wav")
         if (!f.exists() || f.length() < 64L) {
-            writeTones(f, listOf(165.0 to 150, 0.0 to 70, 165.0 to 260))
+            // 삐~: 880Hz 내림차 두 음 — 오답을 명확히 전달하는 고음 삐 소리
+            writeTones(f, listOf(880.0 to 180, 0.0 to 40, 660.0 to 260))
         }
         return f
     }
