@@ -15,8 +15,11 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -50,9 +53,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -65,6 +72,7 @@ import android.content.res.Configuration
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.familyfinder.R
 import com.familyfinder.data.FamilyMember
 import java.io.File
 
@@ -144,16 +152,10 @@ fun GameScreen(viewModel: GameViewModel) {
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         GameTitle()
-                        AnimatedVisibility(
-                            visible = answered,
-                            enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
-                            exit = scaleOut() + fadeOut()
-                        ) {
-                            FeedbackCard(result = gameResult)
-                        }
                         Spacer(modifier = Modifier.weight(1f))
                         // 답을 고른 뒤: 다음 문제 버튼
                         if (answered) {
@@ -173,13 +175,6 @@ fun GameScreen(viewModel: GameViewModel) {
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     GameTitle()
-                    AnimatedVisibility(
-                        visible = answered,
-                        enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
-                        exit = scaleOut() + fadeOut()
-                    ) {
-                        FeedbackCard(result = gameResult)
-                    }
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -205,6 +200,98 @@ fun GameScreen(viewModel: GameViewModel) {
                 }
             }
         }
+
+        // 정답/오답 결과 화면 (해당 이미지가 있으면 전체 오버레이로 표시)
+        if (answered) {
+            ResultOverlay(result = gameResult, onNext = { viewModel.startGame() })
+        }
+    }
+}
+
+/**
+ * 정답이면 "praise", 오답이면 "wrong" 드로어블을 전체 화면 오버레이로 보여준다.
+ * 해당 이미지가 없으면 아무것도 그리지 않아 기존 피드백 카드가 사용된다.
+ * 화면을 누르면 다음 문제로 진행.
+ */
+@Composable
+private fun ResultOverlay(result: GameResult, onNext: () -> Unit) {
+    val context = LocalContext.current
+    val name = when (result) {
+        GameResult.CORRECT -> "praise"
+        GameResult.INCORRECT -> "wrong"
+        else -> return
+    }
+    val resId = remember(name) {
+        context.resources.getIdentifier(name, "drawable", context.packageName)
+    }
+    if (resId == 0) return
+
+    if (result == GameResult.CORRECT) {
+        // 아래 사진이 비치도록 옅은 스크림 + 반투명 글래스 패널을 그 위에 올린다.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.50f))
+                .clickable(onClick = onNext),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth(0.96f)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Color.White.copy(alpha = 0.94f))
+                    .border(2.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // 한글 문구로 영문 "PRAISE"를 대체하고, 이미지 위쪽 영문 부분은 크롭해 가린다.
+                Text(
+                    text = "참 잘했어요!",
+                    fontSize = 44.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFFE65100)
+                )
+                Image(
+                    painter = painterResource(resId),
+                    contentDescription = "정답",
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.BottomCenter,
+                    modifier = Modifier
+                        .fillMaxWidth(0.92f)
+                        .aspectRatio(1.45f)
+                        .clipToBounds()
+                )
+            }
+        }
+    } else {
+        // 오답도 정답과 동일한 글래스 화면: 아래 사진이 비치는 옅은 스크림 + 반투명 패널
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.50f))
+                .clickable(onClick = onNext),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth(0.96f)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Color.White.copy(alpha = 0.94f))
+                    .border(2.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                Image(
+                    painter = painterResource(resId),
+                    contentDescription = "오답",
+                    modifier = Modifier.fillMaxWidth(0.55f)
+                )
+                // 다음 문제로 진행하는 파란 버튼
+                NextButton(onClick = onNext)
+            }
+        }
     }
 }
 
@@ -212,7 +299,7 @@ fun GameScreen(viewModel: GameViewModel) {
 private fun GameTitle() {
     Text(
         text = "가족 찾기 🏠",
-        fontSize = 30.sp,
+        fontSize = 38.sp,
         fontWeight = FontWeight.ExtraBold,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(top = 4.dp)
@@ -221,27 +308,35 @@ private fun GameTitle() {
 
 @Composable
 private fun StartButton(onClick: () -> Unit, continuing: Boolean) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(84.dp),
-        shape = RoundedCornerShape(42.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.primary
-        )
+    RoundGlossyButton(label = if (continuing) "" else "시작", onClick = onClick)
+}
+
+/** 올려주신 파란 버튼 이미지(btn_blue) 위에 글자를 얹은 어린이용 시작/다음 버튼. */
+@Composable
+private fun RoundGlossyButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .size(160.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(
-            if (continuing) Icons.Default.NavigateNext else Icons.Default.PlayArrow,
+        Image(
+            painter = painterResource(R.drawable.btn_blue),
             contentDescription = null,
-            modifier = Modifier.size(56.dp)
+            modifier = Modifier.fillMaxSize()
         )
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(
-            text = if (continuing) "다음" else "시작",
-            fontSize = 30.sp,
-            fontWeight = FontWeight.Bold
-        )
+        if (label.isNotEmpty()) {
+            Text(
+                text = label,
+                color = Color.White,
+                fontSize = 38.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+        }
     }
 }
 
@@ -273,28 +368,7 @@ private fun StartHint(continuing: Boolean) {
 
 @Composable
 private fun NextButton(onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(84.dp),
-        shape = RoundedCornerShape(42.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.secondary
-        )
-    ) {
-        Icon(
-            Icons.Default.NavigateNext,
-            contentDescription = null,
-            modifier = Modifier.size(56.dp)
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(
-            text = "다음",
-            fontSize = 30.sp,
-            fontWeight = FontWeight.Bold
-        )
-    }
+    RoundGlossyButton(label = "", onClick = onClick)
 }
 
 @Composable
@@ -486,24 +560,6 @@ fun PhotoCard(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
-
-            // 관계 라벨 (하단)
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.55f))
-                    .padding(vertical = 8.dp, horizontal = 4.dp)
-            ) {
-                Text(
-                    text = member.relationship,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
 
             // 결과 오버레이
             if (gameResult != GameResult.NONE) {

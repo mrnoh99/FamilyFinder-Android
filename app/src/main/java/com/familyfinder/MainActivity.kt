@@ -52,7 +52,7 @@ fun FamilyFinderApp() {
             NavigationBar {
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.Games, contentDescription = null) },
-                    label = { Text("게임") },
+                    label = { Text("가족찾기") },
                     selected = currentRoute == "game",
                     onClick = {
                         navController.navigate("game") { launchSingleTop = true }
