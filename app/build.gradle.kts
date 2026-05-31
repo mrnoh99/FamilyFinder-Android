@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.familyfinder"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.familyfinder"
@@ -58,10 +58,11 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
-    // Room
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
+    // Room (2.8.x supports KSP2 / Kotlin 2.x — 2.6.x breaks under KSP2 with
+    // "unexpected jvm signature V")
+    implementation("androidx.room:room-runtime:2.8.4")
+    implementation("androidx.room:room-ktx:2.8.4")
+    ksp("androidx.room:room-compiler:2.8.4")
 
     // Coil for image loading
     implementation("io.coil-kt:coil-compose:2.6.0")

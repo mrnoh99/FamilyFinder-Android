@@ -183,24 +183,24 @@ class WavRecorder(@Suppress("unused") private val context: Context) {
 
     @WorkerThread
     private fun trimAndWriteWavPcm16Mono(pcmBytes: ByteArray, outFile: File): Boolean {
-        if (pcmBytes.isEmpty()) return false
-        if (pcmBytes.size % 2 != 0) return false
-
         val sampleCount = pcmBytes.size / 2
+        if (sampleCount == 0) return false
+
         val byteBuffer = ByteBuffer.wrap(pcmBytes).order(ByteOrder.LITTLE_ENDIAN)
         val shorts = ShortArray(sampleCount)
         byteBuffer.asShortBuffer().get(shorts)
 
-        val bounds = findSpeechBounds(shorts) ?: return false
-        var (start, end) = bounds
-
-        start = (start - padFrames).coerceAtLeast(0)
+        // Trim to detected speech when possible. If detection fails (quiet clip,
+        // emulator silence, very short hold) keep the whole clip rather than
+        // discarding the recording — the user pressed record, so we save something.
+        val bounds = findSpeechBounds(shorts)
+        val start = if (bounds != null) (bounds.first - padFrames).coerceAtLeast(0) else 0
         // Do not pad the tail; that would re-include trailing clicks and room noise.
-
-        val outFrames = end - start + 1
-        if (outFrames < minFrames) return false
+        val end = bounds?.second ?: (sampleCount - 1)
+        if (end < start) return false
 
         val trimmed = shorts.copyOfRange(start, end + 1)
+        if (trimmed.isEmpty()) return false
         val enhanced = enhanceSpeechClip(trimmed)
 
         return try {

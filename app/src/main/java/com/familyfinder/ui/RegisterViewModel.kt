@@ -1,6 +1,10 @@
 package com.familyfinder.ui
 
 import android.app.Application
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -8,10 +12,14 @@ import com.familyfinder.audio.WavRecorder
 import com.familyfinder.data.FamilyDatabase
 import com.familyfinder.data.FamilyMember
 import com.familyfinder.data.FamilyRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
+import kotlin.math.roundToInt
 
 class RegisterViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -48,11 +56,50 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
     private val _saveSuccess = MutableStateFlow(false)
     val saveSuccess: StateFlow<Boolean> = _saveSuccess
 
+    private val _recordingError = MutableStateFlow<String?>(null)
+    val recordingError: StateFlow<String?> = _recordingError
+
+    // 편집 중인 가족의 id (null이면 새 가족 등록 모드)
+    private val _editingId = MutableStateFlow<Int?>(null)
+    val editingId: StateFlow<Int?> = _editingId
+
     private val recorder = WavRecorder(application)
     private var pendingType: RecordingType? = null
     private var pendingFile: File? = null
 
+    // 정답/오답 반응은 모든 가족 공통이라 앱 내부에 한 번만 녹음해 재사용한다.
+    private val globalCorrectFile = File(application.filesDir, "global_correct.wav")
+    private val globalIncorrectFile = File(application.filesDir, "global_incorrect.wav")
+
     enum class RecordingType { QUESTION, CORRECT, INCORRECT }
+
+    init {
+        if (globalCorrectFile.exists()) _correctAudioPath.value = globalCorrectFile.absolutePath
+        if (globalIncorrectFile.exists()) _incorrectAudioPath.value = globalIncorrectFile.absolutePath
+    }
+
+    /** 목록에서 가족을 선택하면 그 내용을 폼에 불러와 편집 모드로 전환한다. */
+    fun startEditing(member: FamilyMember) {
+        _editingId.value = member.id
+        _relationship.value = member.relationship
+        _photoUri.value = Uri.fromFile(File(member.photoPath))
+        _questionAudioPath.value = member.questionAudioPath
+        _correctAudioPath.value = member.correctAudioPath
+        _incorrectAudioPath.value = member.incorrectAudioPath
+    }
+
+    /** 편집을 취소하고 새 가족 등록 모드로 돌아간다. */
+    fun cancelEditing() {
+        _editingId.value = null
+        resetForm()
+    }
+
+    fun deleteMember(member: FamilyMember) {
+        viewModelScope.launch {
+            repository.delete(member)
+            if (_editingId.value == member.id) cancelEditing()
+        }
+    }
 
     fun setRelationship(text: String) {
         _relationship.value = text
@@ -62,17 +109,28 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
         _photoUri.value = uri
     }
 
-    fun startRecording(type: RecordingType) {
-        if (_isRecording.value) return
+    /** Returns true if capture actually started (mic acquired), matching the hold-to-record gesture. */
+    fun startRecording(type: RecordingType): Boolean {
+        if (_isRecording.value) return false
         val context = getApplication<Application>()
 
-        val file = File(context.filesDir, "audio_${type.name.lowercase()}_${System.currentTimeMillis()}.wav")
+        // 질문은 가족별 파일, 정답/오답은 공통 고정 파일(재녹음 시 덮어씀).
+        val file = when (type) {
+            RecordingType.QUESTION ->
+                File(context.filesDir, "audio_question_${System.currentTimeMillis()}.wav")
+            RecordingType.CORRECT -> globalCorrectFile
+            RecordingType.INCORRECT -> globalIncorrectFile
+        }
 
-        if (recorder.startRecording(viewModelScope)) {
+        return if (recorder.startRecording(viewModelScope)) {
             pendingType = type
             pendingFile = file
             _isRecording.value = true
             _currentRecordingType.value = type
+            true
+        } else {
+            _recordingError.value = "녹음을 시작할 수 없습니다. 마이크 권한을 확인해주세요."
+            false
         }
     }
 
@@ -96,11 +154,27 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
                     RecordingType.CORRECT -> _correctAudioPath.value = file.absolutePath
                     RecordingType.INCORRECT -> _incorrectAudioPath.value = file.absolutePath
                 }
+            } else {
+                _recordingError.value = "녹음이 저장되지 않았습니다. 버튼을 누른 채 또렷이 말한 뒤 손을 떼주세요."
             }
         }
     }
 
-    fun saveMember() {
+    fun clearRecordingError() {
+        _recordingError.value = null
+    }
+
+    /**
+     * 저장 시 선택한 사진을 사용자가 맞춘 확대/이동(scale·offset)대로 **정사각형으로 크롭**해
+     * 저장한다. 정사각형으로 저장하므로 어떤 화면 방향에서도 정사각 셀에 비율 그대로 표시되어
+     * 찌그러지지 않는다. EXIF 회전도 보정한다.
+     */
+    fun saveMember(
+        photoScale: Float = 1f,
+        photoOffsetX: Float = 0f,
+        photoOffsetY: Float = 0f,
+        photoBoxSizePx: Int = 0,
+    ) {
         val context = getApplication<Application>()
         val rel = _relationship.value.trim()
         val photoUri = _photoUri.value
@@ -112,26 +186,130 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
             correctPath == null || incorrectPath == null
         ) return
 
+        val editingId = _editingId.value
+
         viewModelScope.launch {
             val photoFile = File(context.filesDir, "photo_${System.currentTimeMillis()}.jpg")
-            context.contentResolver.openInputStream(photoUri)?.use { input ->
-                photoFile.outputStream().use { output ->
-                    input.copyTo(output)
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    val src = loadOrientedBitmap(photoUri) ?: return@runCatching false
+                    val cropped = cropSquare(src, photoScale, photoOffsetX, photoOffsetY, photoBoxSizePx)
+                    val output = downscaleIfNeeded(cropped, 1024)
+                    FileOutputStream(photoFile).use { fos ->
+                        output.compress(Bitmap.CompressFormat.JPEG, 90, fos)
+                    }
+                    true
+                }.getOrDefault(false)
+            }
+            if (!ok) {
+                // 크롭 실패 시에도 등록이 막히지 않도록 원본을 그대로 복사한다.
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openInputStream(photoUri)?.use { input ->
+                            photoFile.outputStream().use { output -> input.copyTo(output) }
+                        }
+                    }
                 }
             }
 
             val member = FamilyMember(
+                id = editingId ?: 0,
                 relationship = rel,
                 photoPath = photoFile.absolutePath,
                 questionAudioPath = questionPath,
                 correctAudioPath = correctPath,
                 incorrectAudioPath = incorrectPath
             )
-            repository.insert(member)
-            _savedCount.value++
+            if (editingId != null) {
+                repository.update(member)
+            } else {
+                repository.insert(member)
+                _savedCount.value++
+            }
+            _editingId.value = null
             _saveSuccess.value = true
             resetForm()
         }
+    }
+
+    /** Uri에서 비트맵을 디코드하고 EXIF 방향대로 회전시켜 바로 세운다. (OOM 방지 다운샘플링 포함) */
+    private fun loadOrientedBitmap(uri: Uri): Bitmap? {
+        val resolver = getApplication<Application>().contentResolver
+
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+
+        var sample = 1
+        val maxDim = 2048
+        while (bounds.outWidth / sample > maxDim || bounds.outHeight / sample > maxDim) {
+            sample *= 2
+        }
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+
+        val bitmap = resolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, opts)
+        } ?: return null
+        val orientation = resolver.openInputStream(uri)?.use {
+            ExifInterface(it).getAttributeInt(
+                ExifInterface.TAG_ORIENTATION,
+                ExifInterface.ORIENTATION_NORMAL
+            )
+        } ?: ExifInterface.ORIENTATION_NORMAL
+
+        val matrix = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.preScale(-1f, 1f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.preScale(1f, -1f)
+            else -> return bitmap
+        }
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
+
+    /**
+     * 미리보기(정사각 박스 + ContentScale.Crop + graphicsLayer scale/translation)와 동일한
+     * 변환으로 원본에서 보이는 정사각 영역을 잘라낸다.
+     */
+    private fun cropSquare(
+        src: Bitmap,
+        scale: Float,
+        offsetX: Float,
+        offsetY: Float,
+        boxSizePx: Int,
+    ): Bitmap {
+        if (boxSizePx <= 0) return src
+        val bw = src.width
+        val bh = src.height
+        val cover = maxOf(boxSizePx / bw.toFloat(), boxSizePx / bh.toFloat())
+        val disp = cover * scale
+        if (disp <= 0f) return src
+        val left = boxSizePx / 2f - bw * disp / 2f + offsetX
+        val top = boxSizePx / 2f - bh * disp / 2f + offsetY
+
+        val sx0 = ((0 - left) / disp).coerceIn(0f, bw.toFloat())
+        val sy0 = ((0 - top) / disp).coerceIn(0f, bh.toFloat())
+        val sx1 = ((boxSizePx - left) / disp).coerceIn(0f, bw.toFloat())
+        val sy1 = ((boxSizePx - top) / disp).coerceIn(0f, bh.toFloat())
+
+        val x = sx0.roundToInt().coerceIn(0, bw - 1)
+        val y = sy0.roundToInt().coerceIn(0, bh - 1)
+        val w = (sx1 - sx0).roundToInt().coerceIn(1, bw - x)
+        val h = (sy1 - sy0).roundToInt().coerceIn(1, bh - y)
+        return Bitmap.createBitmap(src, x, y, w, h)
+    }
+
+    private fun downscaleIfNeeded(bitmap: Bitmap, max: Int): Bitmap {
+        val longest = maxOf(bitmap.width, bitmap.height)
+        if (longest <= max) return bitmap
+        val ratio = max.toFloat() / longest
+        return Bitmap.createScaledBitmap(
+            bitmap,
+            (bitmap.width * ratio).roundToInt().coerceAtLeast(1),
+            (bitmap.height * ratio).roundToInt().coerceAtLeast(1),
+            true
+        )
     }
 
     fun clearSaveSuccess() {
@@ -146,11 +324,10 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
         _incorrectAudioPath.value != null
 
     private fun resetForm() {
+        // 정답/오답 반응은 모든 가족 공통이므로 유지하고, 가족별 항목만 비운다.
         _relationship.value = ""
         _photoUri.value = null
         _questionAudioPath.value = null
-        _correctAudioPath.value = null
-        _incorrectAudioPath.value = null
     }
 
     override fun onCleared() {

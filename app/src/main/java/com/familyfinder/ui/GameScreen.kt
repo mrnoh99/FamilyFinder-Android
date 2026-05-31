@@ -19,10 +19,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -55,9 +57,11 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import android.content.res.Configuration
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
@@ -78,6 +82,8 @@ fun GameScreen(viewModel: GameViewModel) {
         }
     }
 
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -90,96 +96,173 @@ fun GameScreen(viewModel: GameViewModel) {
                 )
             )
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "가족 찾기 🏠",
-                fontSize = 30.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-
-            if (memberCount < 4) {
-                Spacer(modifier = Modifier.weight(1f))
-                InsufficientMembersCard(memberCount)
-                Spacer(modifier = Modifier.weight(1f))
-            } else {
-                // 결과 피드백 카드 (인라인)
-                AnimatedVisibility(
-                    visible = gameResult != GameResult.NONE,
-                    enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
-                    exit = scaleOut() + fadeOut()
-                ) {
-                    FeedbackCard(result = gameResult)
-                }
-
-                // 소리 듣기 버튼
-                Button(
-                    onClick = { viewModel.playQuestion() },
+        when {
+            memberCount < 4 -> {
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(62.dp),
-                    shape = RoundedCornerShape(31.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.tertiary
-                    )
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    Icon(
-                        Icons.Default.VolumeUp,
-                        contentDescription = null,
-                        modifier = Modifier.size(30.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "소리 듣기",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    GameTitle()
+                    Spacer(modifier = Modifier.height(24.dp))
+                    InsufficientMembersCard(memberCount)
                 }
+            }
 
-                // 2x2 사진 그리드
-                if (currentSet.size == 4 && targetMember != null) {
-                    PhotoGrid(
-                        members = currentSet,
-                        selectedMemberId = selectedMemberId,
-                        targetMemberId = targetMember!!.id,
-                        gameResult = gameResult,
-                        onSelectMember = viewModel::selectMember
-                    )
-                }
-
-                // 다음 문제 버튼
-                AnimatedVisibility(
-                    visible = gameResult != GameResult.NONE,
-                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+            isLandscape -> {
+                // 가로 모드: 왼쪽 컨트롤 + 오른쪽 2x2 그리드
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Button(
-                        onClick = { viewModel.startGame() },
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(54.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.secondary
-                        )
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Icon(Icons.Default.NavigateNext, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "다음 문제",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        GameTitle()
+                        AnimatedVisibility(
+                            visible = gameResult != GameResult.NONE,
+                            enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
+                            exit = scaleOut() + fadeOut()
+                        ) {
+                            FeedbackCard(result = gameResult)
+                        }
+                        SoundButton(onClick = { viewModel.playQuestion() })
+                        AnimatedVisibility(
+                            visible = gameResult != GameResult.NONE,
+                            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+                        ) {
+                            NextButton(onClick = { viewModel.startGame() })
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (currentSet.size == 4 && targetMember != null) {
+                            SquarePhotoGrid(
+                                members = currentSet,
+                                selectedMemberId = selectedMemberId,
+                                targetMemberId = targetMember!!.id,
+                                gameResult = gameResult,
+                                onSelectMember = viewModel::selectMember
+                            )
+                        }
+                    }
+                }
+            }
+
+            else -> {
+                // 세로 모드: 위에서 아래로 컨트롤 + 2x2 그리드
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    GameTitle()
+                    AnimatedVisibility(
+                        visible = gameResult != GameResult.NONE,
+                        enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
+                        exit = scaleOut() + fadeOut()
+                    ) {
+                        FeedbackCard(result = gameResult)
+                    }
+                    SoundButton(onClick = { viewModel.playQuestion() })
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (currentSet.size == 4 && targetMember != null) {
+                            SquarePhotoGrid(
+                                members = currentSet,
+                                selectedMemberId = selectedMemberId,
+                                targetMemberId = targetMember!!.id,
+                                gameResult = gameResult,
+                                onSelectMember = viewModel::selectMember
+                            )
+                        }
+                    }
+                    AnimatedVisibility(
+                        visible = gameResult != GameResult.NONE,
+                        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+                    ) {
+                        NextButton(onClick = { viewModel.startGame() })
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun GameTitle() {
+    Text(
+        text = "가족 찾기 🏠",
+        fontSize = 30.sp,
+        fontWeight = FontWeight.ExtraBold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 4.dp)
+    )
+}
+
+@Composable
+private fun SoundButton(onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(62.dp),
+        shape = RoundedCornerShape(31.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.tertiary
+        )
+    ) {
+        Icon(
+            Icons.Default.VolumeUp,
+            contentDescription = null,
+            modifier = Modifier.size(30.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = "소리 듣기",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun NextButton(onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(54.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.secondary
+        )
+    ) {
+        Icon(Icons.Default.NavigateNext, contentDescription = null)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = "다음 문제",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
@@ -273,17 +356,44 @@ fun FeedbackCard(result: GameResult) {
     }
 }
 
+/**
+ * 사용 가능한 공간 안에서 2x2 그리드를 항상 정사각형으로 맞춘다. 세로/가로 어느 방향이든
+ * min(가로, 세로) 변을 한 변으로 하는 정사각 영역에 그려 카드가 찌그러지지 않는다.
+ */
+@Composable
+fun SquarePhotoGrid(
+    members: List<FamilyMember>,
+    selectedMemberId: Int?,
+    targetMemberId: Int,
+    gameResult: GameResult,
+    onSelectMember: (FamilyMember) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.Center) {
+        val side = minOf(maxWidth, maxHeight)
+        PhotoGrid(
+            members = members,
+            selectedMemberId = selectedMemberId,
+            targetMemberId = targetMemberId,
+            gameResult = gameResult,
+            onSelectMember = onSelectMember,
+            modifier = Modifier.size(side)
+        )
+    }
+}
+
 @Composable
 fun PhotoGrid(
     members: List<FamilyMember>,
     selectedMemberId: Int?,
     targetMemberId: Int,
     gameResult: GameResult,
-    onSelectMember: (FamilyMember) -> Unit
+    onSelectMember: (FamilyMember) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         members.chunked(2).forEach { rowMembers ->
             Row(
