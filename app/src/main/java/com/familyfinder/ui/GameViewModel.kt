@@ -40,6 +40,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _hasPlayed = MutableStateFlow(false)
     val hasPlayed: StateFlow<Boolean> = _hasPlayed
 
+    // 질문 음성이 재생되는 동안은 사진 선택(touch)을 막는다.
+    private val _questionPlaying = MutableStateFlow(false)
+
+    // 정답/오답 음성이 재생되는 동안은 다음 진행(touch)을 막는다.
+    private val _resultPlaying = MutableStateFlow(false)
+    val resultPlaying: StateFlow<Boolean> = _resultPlaying
+
     private var mediaPlayer: MediaPlayer? = null
 
     init {
@@ -60,6 +67,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun resetToStart() {
         mediaPlayer?.release()
         mediaPlayer = null
+        _questionPlaying.value = false
+        _resultPlaying.value = false
         _currentSet.value = emptyList()
         _targetMember.value = null
         _gameResult.value = GameResult.NONE
@@ -78,44 +87,62 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             _targetMember.value = target
             _gameResult.value = GameResult.NONE
             _selectedMemberId.value = null
-            // 새 문제가 시작되면 질문 소리를 자동으로 들려준다(별도 소리듣기 버튼 불필요).
-            playAudio(target.questionAudioPath)
+            _resultPlaying.value = false
+            // 새 문제가 시작되면 질문 소리를 들려주고, 끝날 때까지 사진 선택을 막는다.
+            _questionPlaying.value = true
+            playAudio(target.questionAudioPath) { _questionPlaying.value = false }
         }
     }
 
     fun playQuestion() {
         val target = _targetMember.value ?: return
-        playAudio(target.questionAudioPath)
+        _questionPlaying.value = true
+        playAudio(target.questionAudioPath) { _questionPlaying.value = false }
     }
 
     fun selectMember(member: FamilyMember) {
+        // 질문 음성이 끝나기 전이거나 이미 답한 경우 무시
+        if (_questionPlaying.value) return
         if (_gameResult.value != GameResult.NONE) return
 
         _selectedMemberId.value = member.id
         val isCorrect = member.id == _targetMember.value?.id
 
+        // 정답/오답 음성이 끝날 때까지 다음 진행을 막는다.
+        _resultPlaying.value = true
         if (isCorrect) {
             _gameResult.value = GameResult.CORRECT
-            _targetMember.value?.let { playAudio(it.correctAudioPath) }
+            playAudio(member.correctAudioPath) { _resultPlaying.value = false }
         } else {
             _gameResult.value = GameResult.INCORRECT
-            playAudio(member.incorrectAudioPath)
+            playAudio(member.incorrectAudioPath) { _resultPlaying.value = false }
         }
     }
 
-    private fun playAudio(path: String) {
+    private fun playAudio(path: String, onDone: () -> Unit = {}) {
         mediaPlayer?.release()
         mediaPlayer = null
 
         try {
-            mediaPlayer = MediaPlayer().apply {
-                setDataSource(path)
-                prepare()
-                start()
-                setOnCompletionListener { release() }
+            val mp = MediaPlayer()
+            mediaPlayer = mp
+            mp.setOnCompletionListener { p ->
+                if (mediaPlayer === p) mediaPlayer = null
+                p.release()
+                onDone()
             }
+            mp.setOnErrorListener { p, _, _ ->
+                if (mediaPlayer === p) mediaPlayer = null
+                p.release()
+                onDone()
+                true
+            }
+            mp.setDataSource(path)
+            mp.prepare()
+            mp.start()
         } catch (e: Exception) {
             e.printStackTrace()
+            onDone()
         }
     }
 

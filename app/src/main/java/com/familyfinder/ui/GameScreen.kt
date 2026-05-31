@@ -19,6 +19,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,6 +64,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
@@ -83,16 +85,15 @@ fun GameScreen(viewModel: GameViewModel) {
     val gameResult by viewModel.gameResult.collectAsStateWithLifecycle()
     val memberCount by viewModel.memberCount.collectAsStateWithLifecycle()
     val selectedMemberId by viewModel.selectedMemberId.collectAsStateWithLifecycle()
-    val hasPlayed by viewModel.hasPlayed.collectAsStateWithLifecycle()
+    val resultPlaying by viewModel.resultPlaying.collectAsStateWithLifecycle()
 
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val answered = gameResult != GameResult.NONE
 
-    // 게임 화면에 들어올 때마다(등록 화면 등에서 돌아오면):
-    // - 한 번이라도 플레이했으면 다음 문제(사진 그리드)를 바로 제시
-    // - 아직 한 번도 안 했으면 "게임 시작" 화면을 보여줌
+    // 게임 화면에 들어오면(앱 시작·등록 후 복귀 등) 바로 문제를 시작한다. (별도 시작 버튼 없음)
+    // 단, 진행 중인 문제가 있으면(예: 화면 회전 후) 새로 시작하지 않는다.
     LaunchedEffect(Unit) {
-        if (hasPlayed) viewModel.startGame() else viewModel.resetToStart()
+        if (currentSet.isEmpty()) viewModel.startGame()
     }
 
     Box(
@@ -144,8 +145,6 @@ fun GameScreen(viewModel: GameViewModel) {
                                 gameResult = gameResult,
                                 onSelectMember = viewModel::selectMember
                             )
-                        } else {
-                            StartPanel(onStart = { viewModel.startGame() }, continuing = hasPlayed)
                         }
                     }
                     Column(
@@ -189,8 +188,6 @@ fun GameScreen(viewModel: GameViewModel) {
                                 gameResult = gameResult,
                                 onSelectMember = viewModel::selectMember
                             )
-                        } else {
-                            StartPanel(onStart = { viewModel.startGame() }, continuing = hasPlayed)
                         }
                     }
                     // 답을 고른 뒤: 다음 문제 버튼
@@ -202,8 +199,13 @@ fun GameScreen(viewModel: GameViewModel) {
         }
 
         // 정답/오답 결과 화면 (해당 이미지가 있으면 전체 오버레이로 표시)
+        // 음성이 재생되는 동안(resultPlaying)은 터치를 막고, 끝나면 다음 버튼을 띄운다.
         if (answered) {
-            ResultOverlay(result = gameResult, onNext = { viewModel.startGame() })
+            ResultOverlay(
+                result = gameResult,
+                interactive = !resultPlaying,
+                onNext = { viewModel.startGame() }
+            )
         }
     }
 }
@@ -214,7 +216,7 @@ fun GameScreen(viewModel: GameViewModel) {
  * 화면을 누르면 다음 문제로 진행.
  */
 @Composable
-private fun ResultOverlay(result: GameResult, onNext: () -> Unit) {
+private fun ResultOverlay(result: GameResult, interactive: Boolean, onNext: () -> Unit) {
     val context = LocalContext.current
     val name = when (result) {
         GameResult.CORRECT -> "praise"
@@ -226,25 +228,29 @@ private fun ResultOverlay(result: GameResult, onNext: () -> Unit) {
     }
     if (resId == 0) return
 
-    if (result == GameResult.CORRECT) {
-        // 아래 사진이 비치도록 옅은 스크림 + 반투명 글래스 패널을 그 위에 올린다.
-        Box(
+    // 아래 사진이 비치는 옅은 스크림 + 반투명 글래스 패널.
+    // 음성이 끝나기 전(interactive=false)에는 터치를 막는다.
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.50f))
+            // 항상 터치를 소비해 뒤쪽 요소가 눌리지 않게 하고, 음성이 끝난 뒤에만 다음으로 진행
+            .pointerInput(interactive) {
+                detectTapGestures { if (interactive) onNext() }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
             modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.50f))
-                .clickable(onClick = onNext),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth(0.96f)
+                .clip(RoundedCornerShape(28.dp))
+                .background(Color.White.copy(alpha = 0.94f))
+                .border(2.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth(0.96f)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(Color.White.copy(alpha = 0.94f))
-                    .border(2.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
-                    .padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            if (result == GameResult.CORRECT) {
                 // 한글 문구로 영문 "PRAISE"를 대체하고, 이미지 위쪽 영문 부분은 크롭해 가린다.
                 Text(
                     text = "참 잘했어요!",
@@ -262,35 +268,23 @@ private fun ResultOverlay(result: GameResult, onNext: () -> Unit) {
                         .aspectRatio(1.45f)
                         .clipToBounds()
                 )
-            }
-        }
-    } else {
-        // 오답도 정답과 동일한 글래스 화면: 아래 사진이 비치는 옅은 스크림 + 반투명 패널
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.50f))
-                .clickable(onClick = onNext),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth(0.96f)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(Color.White.copy(alpha = 0.94f))
-                    .border(2.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
-                    .padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(20.dp)
-            ) {
+            } else {
                 Image(
                     painter = painterResource(resId),
                     contentDescription = "오답",
                     modifier = Modifier.fillMaxWidth(0.55f)
                 )
-                // 다음 문제로 진행하는 파란 버튼
-                NextButton(onClick = onNext)
             }
+        }
+
+        // 음성이 끝나 터치가 가능해지면 btn_blue(다음)를 최상위로 띄운다.
+        if (interactive) {
+            NextButton(
+                onClick = onNext,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 36.dp)
+            )
         }
     }
 }
@@ -306,12 +300,7 @@ private fun GameTitle() {
     )
 }
 
-@Composable
-private fun StartButton(onClick: () -> Unit, continuing: Boolean) {
-    RoundGlossyButton(label = if (continuing) "" else "시작", onClick = onClick)
-}
-
-/** 올려주신 파란 버튼 이미지(btn_blue) 위에 글자를 얹은 어린이용 시작/다음 버튼. */
+/** 올려주신 파란 버튼 이미지(btn_blue) 위에 글자를 얹은 어린이용 다음 버튼. */
 @Composable
 private fun RoundGlossyButton(
     label: String,
@@ -341,34 +330,8 @@ private fun RoundGlossyButton(
 }
 
 @Composable
-private fun StartPanel(onStart: () -> Unit, continuing: Boolean) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(24.dp)
-    ) {
-        StartHint(continuing)
-        StartButton(onClick = onStart, continuing = continuing)
-    }
-}
-
-@Composable
-private fun StartHint(continuing: Boolean) {
-    Text(
-        text = if (continuing) "\"다음 문제\"를 눌러\n계속 진행하세요!"
-        else "아래 \"게임 시작\"을 눌러\n가족 찾기를 시작하세요!",
-        fontSize = 20.sp,
-        fontWeight = FontWeight.Bold,
-        textAlign = TextAlign.Center,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-}
-
-@Composable
-private fun NextButton(onClick: () -> Unit) {
-    RoundGlossyButton(label = "", onClick = onClick)
+private fun NextButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    RoundGlossyButton(label = "", onClick = onClick, modifier = modifier)
 }
 
 @Composable
