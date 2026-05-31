@@ -46,8 +46,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.allMembers.collect { members ->
                 _memberCount.value = members.size
+                // 가족 목록이 바뀌면(등록/수정/삭제) 게임을 처음 시작 화면으로 되돌린다.
+                resetToStart()
             }
         }
+    }
+
+    /** 진행 중이던 게임을 비우고 "게임 시작" 화면 상태로 되돌린다. */
+    private fun resetToStart() {
+        mediaPlayer?.release()
+        mediaPlayer = null
+        _currentSet.value = emptyList()
+        _targetMember.value = null
+        _gameResult.value = GameResult.NONE
+        _selectedMemberId.value = null
     }
 
     fun startGame() {
