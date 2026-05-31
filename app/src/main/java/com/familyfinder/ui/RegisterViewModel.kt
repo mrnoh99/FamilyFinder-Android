@@ -76,6 +76,17 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
     init {
         if (globalCorrectFile.exists()) _correctAudioPath.value = globalCorrectFile.absolutePath
         if (globalIncorrectFile.exists()) _incorrectAudioPath.value = globalIncorrectFile.absolutePath
+        // 예시 시드가 비동기로 공통 반응 파일을 만들면 이후에 반영한다(앱 재시작 불필요).
+        viewModelScope.launch {
+            allMembers.collect {
+                if (_correctAudioPath.value == null && globalCorrectFile.exists()) {
+                    _correctAudioPath.value = globalCorrectFile.absolutePath
+                }
+                if (_incorrectAudioPath.value == null && globalIncorrectFile.exists()) {
+                    _incorrectAudioPath.value = globalIncorrectFile.absolutePath
+                }
+            }
+        }
     }
 
     /** 목록에서 가족을 선택하면 그 내용을 폼에 불러와 편집 모드로 전환한다. */
@@ -229,6 +240,38 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
             _editingId.value = null
             _saveSuccess.value = true
             resetForm()
+        }
+    }
+
+    /**
+     * 현재 조정(확대/이동)대로 사진을 정사각형으로 잘라 적용한다. 결과를 임시 파일로 저장하고
+     * photoUri를 그 잘린 이미지로 교체해, 미리보기에 확정된 사각형 사진이 바로 나타나게 한다.
+     */
+    fun applyPhotoCrop(
+        photoScale: Float,
+        photoOffsetX: Float,
+        photoOffsetY: Float,
+        photoBoxSizePx: Int,
+    ) {
+        val uri = _photoUri.value ?: return
+        if (photoBoxSizePx <= 0) return
+        val context = getApplication<Application>()
+        viewModelScope.launch {
+            val croppedUri = withContext(Dispatchers.IO) {
+                runCatching {
+                    val src = loadOrientedBitmap(uri) ?: return@runCatching null
+                    val cropped = cropSquare(src, photoScale, photoOffsetX, photoOffsetY, photoBoxSizePx)
+                    val output = downscaleIfNeeded(cropped, 1024)
+                    val file = File(context.cacheDir, "crop_${System.currentTimeMillis()}.jpg")
+                    FileOutputStream(file).use { fos ->
+                        output.compress(Bitmap.CompressFormat.JPEG, 90, fos)
+                    }
+                    Uri.fromFile(file)
+                }.getOrNull()
+            }
+            if (croppedUri != null) {
+                _photoUri.value = croppedUri
+            }
         }
     }
 

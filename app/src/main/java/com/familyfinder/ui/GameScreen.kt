@@ -38,7 +38,7 @@ import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.NavigateNext
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -76,13 +76,9 @@ fun GameScreen(viewModel: GameViewModel) {
     val memberCount by viewModel.memberCount.collectAsStateWithLifecycle()
     val selectedMemberId by viewModel.selectedMemberId.collectAsStateWithLifecycle()
 
-    LaunchedEffect(memberCount) {
-        if (memberCount >= 4 && currentSet.isEmpty()) {
-            viewModel.startGame()
-        }
-    }
-
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val notStarted = currentSet.size != 4 || targetMember == null
+    val answered = gameResult != GameResult.NONE
 
     Box(
         modifier = Modifier
@@ -127,19 +123,17 @@ fun GameScreen(viewModel: GameViewModel) {
                     ) {
                         GameTitle()
                         AnimatedVisibility(
-                            visible = gameResult != GameResult.NONE,
+                            visible = answered,
                             enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
                             exit = scaleOut() + fadeOut()
                         ) {
                             FeedbackCard(result = gameResult)
                         }
-                        SoundButton(onClick = { viewModel.playQuestion() })
-                        AnimatedVisibility(
-                            visible = gameResult != GameResult.NONE,
-                            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
-                        ) {
-                            NextButton(onClick = { viewModel.startGame() })
+                        Spacer(modifier = Modifier.weight(1f))
+                        // 아래: 시작 / 다음 버튼
+                        when {
+                            notStarted -> StartButton(onClick = { viewModel.startGame() })
+                            answered -> NextButton(onClick = { viewModel.startGame() })
                         }
                     }
                     Box(
@@ -156,6 +150,8 @@ fun GameScreen(viewModel: GameViewModel) {
                                 gameResult = gameResult,
                                 onSelectMember = viewModel::selectMember
                             )
+                        } else {
+                            StartHint()
                         }
                     }
                 }
@@ -172,13 +168,12 @@ fun GameScreen(viewModel: GameViewModel) {
                 ) {
                     GameTitle()
                     AnimatedVisibility(
-                        visible = gameResult != GameResult.NONE,
+                        visible = answered,
                         enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
                         exit = scaleOut() + fadeOut()
                     ) {
                         FeedbackCard(result = gameResult)
                     }
-                    SoundButton(onClick = { viewModel.playQuestion() })
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -193,14 +188,14 @@ fun GameScreen(viewModel: GameViewModel) {
                                 gameResult = gameResult,
                                 onSelectMember = viewModel::selectMember
                             )
+                        } else {
+                            StartHint()
                         }
                     }
-                    AnimatedVisibility(
-                        visible = gameResult != GameResult.NONE,
-                        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
-                    ) {
-                        NextButton(onClick = { viewModel.startGame() })
+                    // 아래: 시작 / 다음 버튼
+                    when {
+                        notStarted -> StartButton(onClick = { viewModel.startGame() })
+                        answered -> NextButton(onClick = { viewModel.startGame() })
                     }
                 }
             }
@@ -220,7 +215,7 @@ private fun GameTitle() {
 }
 
 @Composable
-private fun SoundButton(onClick: () -> Unit) {
+private fun StartButton(onClick: () -> Unit) {
     Button(
         onClick = onClick,
         modifier = Modifier
@@ -228,21 +223,32 @@ private fun SoundButton(onClick: () -> Unit) {
             .height(62.dp),
         shape = RoundedCornerShape(31.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.tertiary
+            containerColor = MaterialTheme.colorScheme.primary
         )
     ) {
         Icon(
-            Icons.Default.VolumeUp,
+            Icons.Default.PlayArrow,
             contentDescription = null,
-            modifier = Modifier.size(30.dp)
+            modifier = Modifier.size(32.dp)
         )
         Spacer(modifier = Modifier.width(12.dp))
         Text(
-            text = "소리 듣기",
-            fontSize = 20.sp,
+            text = "게임 시작",
+            fontSize = 22.sp,
             fontWeight = FontWeight.Bold
         )
     }
+}
+
+@Composable
+private fun StartHint() {
+    Text(
+        text = "아래 \"게임 시작\"을 눌러\n가족 찾기를 시작하세요!",
+        fontSize = 20.sp,
+        fontWeight = FontWeight.Bold,
+        textAlign = TextAlign.Center,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
 }
 
 @Composable

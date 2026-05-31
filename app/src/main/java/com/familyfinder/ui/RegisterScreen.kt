@@ -17,7 +17,8 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -34,6 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -46,6 +48,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -217,6 +220,15 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
+            val missing = buildList {
+                if (relationship.isBlank()) add("관계")
+                if (photoUri == null) add("사진")
+                if (questionAudioPath == null) add("질문 녹음")
+                if (correctAudioPath == null) add("정답 반응(공통)")
+                if (incorrectAudioPath == null) add("오답 반응(공통)")
+            }
+            val canSave = missing.isEmpty()
+
             Text(
                 text = if (editingId != null) "가족 정보 수정" else "가족 등록",
                 fontSize = 28.sp,
@@ -258,25 +270,63 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                 }
             }
 
-            // 1. 관계 입력
+            // 1. 관계 입력 — 자주 쓰는 호칭을 칩으로 고르거나 직접 입력
             SectionCard(title = "1. 관계 입력", done = relationship.isNotBlank()) {
+                Text(
+                    text = "아래에서 호칭을 고르거나 직접 입력하세요.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                RelationshipChips(
+                    selected = relationship,
+                    onSelect = viewModel::setRelationship
+                )
                 OutlinedTextField(
                     value = relationship,
                     onValueChange = viewModel::setRelationship,
-                    label = { Text("관계 (예: 엄마, 아빠, 할머니, 오빠)") },
+                    label = { Text("직접 입력 (예: 엄마, 아빠, 할머니, 오빠)") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) }
                 )
             }
 
-            // 2. 사진 등록 — 두 손가락으로 확대/이동해 정사각형으로 맞춤
-            SectionCard(title = "2. 사진 등록", done = photoUri != null) {
+            // 2. 사진 등록 — 두 손가락으로 확대/이동해 정사각형으로 맞춘 뒤 "사진 확정"
+            SectionCard(
+                title = "2. 사진 등록",
+                done = photoUri != null,
+                titleAction = if (photoUri != null) {
+                    {
+                        Button(
+                            onClick = {
+                                viewModel.applyPhotoCrop(
+                                    photoScale = photoScale,
+                                    photoOffsetX = photoOffsetX,
+                                    photoOffsetY = photoOffsetY,
+                                    photoBoxSizePx = photoBoxSizePx
+                                )
+                            },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                horizontal = 12.dp,
+                                vertical = 4.dp
+                            )
+                        ) {
+                            Icon(
+                                Icons.Default.Crop,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("사진 확정")
+                        }
+                    }
+                } else null
+            ) {
                 if (photoUri != null) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(1f)
+                            .align(Alignment.CenterHorizontally)
+                            .size(200.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color.Black)
                             .onSizeChanged { photoBoxSizePx = it.width }
@@ -304,7 +354,7 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                         )
                     }
                     Text(
-                        text = "두 손가락으로 확대·이동해 얼굴을 맞춰주세요 (정사각형으로 저장돼요)",
+                        text = "두 손가락으로 확대·이동해 얼굴을 맞춘 뒤 위의 \"사진 확정\"을 누르세요.",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -361,15 +411,6 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
             }
 
             // 입력 상태 체크리스트 — 무엇이 채워졌는지 한눈에 보여줌
-            val missing = buildList {
-                if (relationship.isBlank()) add("관계")
-                if (photoUri == null) add("사진")
-                if (questionAudioPath == null) add("질문 녹음")
-                if (correctAudioPath == null) add("정답 반응 녹음")
-                if (incorrectAudioPath == null) add("오답 반응 녹음")
-            }
-            val canSave = missing.isEmpty()
-
             SectionCard(title = "입력 상태") {
                 StatusRow("관계", relationship.isNotBlank())
                 StatusRow("사진", photoUri != null)
@@ -378,7 +419,7 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                 StatusRow("오답 반응 (공통)", incorrectAudioPath != null)
             }
 
-            // 저장 버튼 — 항상 누를 수 있고, 빠진 항목이 있으면 안내한다
+            // 하단 등록 버튼 — 전체 내용을 확정해 가족을 등록/수정
             Button(
                 onClick = {
                     if (canSave) {
@@ -405,7 +446,7 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
             ) {
                 Icon(Icons.Default.Save, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                val saveLabel = if (editingId != null) "수정 저장" else "가족 등록 저장"
+                val saveLabel = if (editingId != null) "수정 저장" else "가족 등록"
                 Text(
                     text = if (canSave) saveLabel else "$saveLabel (미완료)",
                     fontSize = 18.sp,
@@ -484,6 +525,31 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
     }
 }
 
+/** 가족 간 자주 쓰는 호칭 목록 (한정적이므로 선택지로 제시). */
+private val RELATIONSHIP_SUGGESTIONS = listOf(
+    "엄마", "아빠", "할머니", "할아버지", "외할머니", "외할아버지",
+    "누나", "형", "언니", "오빠", "여동생", "남동생",
+    "이모", "고모", "삼촌", "외삼촌", "큰아빠", "작은아빠"
+)
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RelationshipChips(selected: String, onSelect: (String) -> Unit) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        RELATIONSHIP_SUGGESTIONS.forEach { title ->
+            FilterChip(
+                selected = selected == title,
+                onClick = { onSelect(title) },
+                label = { Text(title) }
+            )
+        }
+    }
+}
+
 /** 카메라 촬영 결과를 저장할 임시 파일의 FileProvider Uri를 만든다. */
 private fun createCameraImageUri(context: Context): Uri {
     val file = File(context.cacheDir, "camera_${System.currentTimeMillis()}.jpg")
@@ -516,6 +582,7 @@ private fun StatusRow(label: String, done: Boolean) {
 fun SectionCard(
     title: String,
     done: Boolean = false,
+    titleAction: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Card(
@@ -527,6 +594,7 @@ fun SectionCard(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -543,6 +611,10 @@ fun SectionCard(
                         tint = Color(0xFF4CAF50),
                         modifier = Modifier.size(18.dp)
                     )
+                }
+                if (titleAction != null) {
+                    Spacer(modifier = Modifier.weight(1f))
+                    titleAction()
                 }
             }
             content()

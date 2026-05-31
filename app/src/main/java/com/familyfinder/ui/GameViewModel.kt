@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.familyfinder.data.FamilyDatabase
 import com.familyfinder.data.FamilyMember
 import com.familyfinder.data.FamilyRepository
+import com.familyfinder.data.SampleSeeder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -38,6 +39,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var mediaPlayer: MediaPlayer? = null
 
     init {
+        // 첫 실행 시 예시 가족(엄마·아빠·할아버지·할머니)을 만들어 넣는다.
+        viewModelScope.launch {
+            SampleSeeder.seedIfNeeded(getApplication<Application>(), repository)
+        }
         viewModelScope.launch {
             repository.allMembers.collect { members ->
                 _memberCount.value = members.size
@@ -51,10 +56,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             if (members.size < 4) return@launch
 
             val set = members.shuffled().take(4)
+            val target = set.random()
             _currentSet.value = set
-            _targetMember.value = set.random()
+            _targetMember.value = target
             _gameResult.value = GameResult.NONE
             _selectedMemberId.value = null
+            // 새 문제가 시작되면 질문 소리를 자동으로 들려준다(별도 소리듣기 버튼 불필요).
+            playAudio(target.questionAudioPath)
         }
     }
 
