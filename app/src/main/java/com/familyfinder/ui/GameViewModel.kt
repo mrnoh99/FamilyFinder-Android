@@ -4,6 +4,7 @@ import android.app.Application
 import android.media.MediaPlayer
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.familyfinder.data.CueSounds
 import com.familyfinder.data.FamilyDatabase
 import com.familyfinder.data.FamilyMember
 import com.familyfinder.data.FamilyRepository
@@ -53,6 +54,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // 첫 실행 시 예시 가족(엄마·아빠·할아버지·할머니)을 만들어 넣는다.
         viewModelScope.launch {
             SampleSeeder.seedIfNeeded(getApplication<Application>(), repository)
+        }
+        // 정답/오답 효과음(딩동·삑)을 미리 생성해 둔다.
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val ctx = getApplication<Application>()
+            CueSounds.dingFile(ctx)
+            CueSounds.buzzFile(ctx)
         }
         viewModelScope.launch {
             repository.allMembers.collect { members ->
@@ -109,13 +116,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val isCorrect = member.id == _targetMember.value?.id
 
         // 정답/오답 음성이 끝날 때까지 다음 진행을 막는다.
+        // 피드백 음성 앞에 효과음(정답=딩동, 오답=삑)을 먼저 들려준다.
         _resultPlaying.value = true
+        val context = getApplication<Application>()
         if (isCorrect) {
             _gameResult.value = GameResult.CORRECT
-            playAudio(member.correctAudioPath) { _resultPlaying.value = false }
+            val cue = CueSounds.dingFile(context).absolutePath
+            playAudio(cue) {
+                playAudio(member.correctAudioPath) { _resultPlaying.value = false }
+            }
         } else {
             _gameResult.value = GameResult.INCORRECT
-            playAudio(member.incorrectAudioPath) { _resultPlaying.value = false }
+            val cue = CueSounds.buzzFile(context).absolutePath
+            playAudio(cue) {
+                playAudio(member.incorrectAudioPath) { _resultPlaying.value = false }
+            }
         }
     }
 

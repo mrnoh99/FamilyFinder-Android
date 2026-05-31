@@ -90,10 +90,12 @@ fun GameScreen(viewModel: GameViewModel) {
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val answered = gameResult != GameResult.NONE
 
-    // 게임 화면에 들어오면(앱 시작·등록 후 복귀 등) 바로 문제를 시작한다. (별도 시작 버튼 없음)
-    // 단, 진행 중인 문제가 있으면(예: 화면 회전 후) 새로 시작하지 않는다.
-    LaunchedEffect(Unit) {
-        if (currentSet.isEmpty()) viewModel.startGame()
+    // 가족이 4명 이상 준비되고 진행 중인 문제가 없으면 자동으로 시작한다.
+    // (앱 첫 실행 시 씨딩이 끝난 뒤, 또는 가족 등록 화면에서 돌아왔을 때 자동 시작)
+    LaunchedEffect(memberCount, currentSet.isEmpty()) {
+        if (memberCount >= 4 && currentSet.isEmpty()) {
+            viewModel.startGame()
+        }
     }
 
     Box(
@@ -156,10 +158,6 @@ fun GameScreen(viewModel: GameViewModel) {
                     ) {
                         GameTitle()
                         Spacer(modifier = Modifier.weight(1f))
-                        // 답을 고른 뒤: 다음 문제 버튼
-                        if (answered) {
-                            NextButton(onClick = { viewModel.startGame() })
-                        }
                     }
                 }
             }
@@ -189,10 +187,6 @@ fun GameScreen(viewModel: GameViewModel) {
                                 onSelectMember = viewModel::selectMember
                             )
                         }
-                    }
-                    // 답을 고른 뒤: 다음 문제 버튼
-                    if (answered) {
-                        NextButton(onClick = { viewModel.startGame() })
                     }
                 }
             }
@@ -333,6 +327,7 @@ private fun RoundGlossyButton(
 private fun NextButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     RoundGlossyButton(label = "", onClick = onClick, modifier = modifier)
 }
+
 
 @Composable
 fun InsufficientMembersCard(count: Int) {
