@@ -36,6 +36,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Mic
@@ -253,13 +254,24 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f)
                 )
-                Button(onClick = {
-                    viewModel.cancelEditing()
-                    showForm = true
-                }) {
-                    Icon(Icons.Default.Add, contentDescription = null)
+                val formOpen = showForm || editingId != null
+                Button(
+                    onClick = {
+                        viewModel.cancelEditing()
+                        showForm = !formOpen
+                    },
+                    colors = if (formOpen) {
+                        ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    } else {
+                        ButtonDefaults.buttonColors()
+                    }
+                ) {
+                    Icon(
+                        if (formOpen) Icons.Default.Close else Icons.Default.Add,
+                        contentDescription = null
+                    )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("추가")
+                    Text(if (formOpen) "취소" else "추가")
                 }
             }
 
@@ -277,26 +289,16 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                         containerColor = MaterialTheme.colorScheme.secondaryContainer
                     )
                 ) {
-                    Row(
+                    Text(
+                        text = if (editingId != null) "편집 중 — 수정 후 저장하세요 (위 취소로 닫기)"
+                        else "새 가족 추가 중 (위 취소로 닫기)",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = if (editingId != null) "편집 중 — 수정 후 저장하세요" else "새 가족 추가 중",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                        TextButton(onClick = {
-                            viewModel.cancelEditing()
-                            showForm = false
-                        }) {
-                            Text("닫기")
-                        }
-                    }
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                    )
                 }
 
             // 1. 관계 입력 — 자주 쓰는 호칭을 칩으로 고르거나 직접 입력

@@ -77,7 +77,6 @@ fun GameScreen(viewModel: GameViewModel) {
     val selectedMemberId by viewModel.selectedMemberId.collectAsStateWithLifecycle()
 
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val notStarted = currentSet.size != 4 || targetMember == null
     val answered = gameResult != GameResult.NONE
 
     Box(
@@ -130,10 +129,9 @@ fun GameScreen(viewModel: GameViewModel) {
                             FeedbackCard(result = gameResult)
                         }
                         Spacer(modifier = Modifier.weight(1f))
-                        // 아래: 시작 / 다음 버튼
-                        when {
-                            notStarted -> StartButton(onClick = { viewModel.startGame() })
-                            answered -> NextButton(onClick = { viewModel.startGame() })
+                        // 답을 고른 뒤: 다음 문제 버튼
+                        if (answered) {
+                            NextButton(onClick = { viewModel.startGame() })
                         }
                     }
                     Box(
@@ -151,7 +149,7 @@ fun GameScreen(viewModel: GameViewModel) {
                                 onSelectMember = viewModel::selectMember
                             )
                         } else {
-                            StartHint()
+                            StartPanel(onStart = { viewModel.startGame() })
                         }
                     }
                 }
@@ -189,13 +187,12 @@ fun GameScreen(viewModel: GameViewModel) {
                                 onSelectMember = viewModel::selectMember
                             )
                         } else {
-                            StartHint()
+                            StartPanel(onStart = { viewModel.startGame() })
                         }
                     }
-                    // 아래: 시작 / 다음 버튼
-                    when {
-                        notStarted -> StartButton(onClick = { viewModel.startGame() })
-                        answered -> NextButton(onClick = { viewModel.startGame() })
+                    // 답을 고른 뒤: 다음 문제 버튼
+                    if (answered) {
+                        NextButton(onClick = { viewModel.startGame() })
                     }
                 }
             }
@@ -237,6 +234,20 @@ private fun StartButton(onClick: () -> Unit) {
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold
         )
+    }
+}
+
+@Composable
+private fun StartPanel(onStart: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        StartHint()
+        StartButton(onClick = onStart)
     }
 }
 
