@@ -12,6 +12,7 @@ import com.familyfinder.audio.WavRecorder
 import com.familyfinder.data.FamilyDatabase
 import com.familyfinder.data.FamilyMember
 import com.familyfinder.data.FamilyRepository
+import com.familyfinder.data.TtsSynthesizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -173,6 +174,47 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
 
     fun clearRecordingError() {
         _recordingError.value = null
+    }
+
+    // ── TTS(기계음)로 되돌리기 ──────────────────────────────────────────────
+
+    /** 질문 음성을 현재 관계로 만든 TTS 문장으로 되돌린다. */
+    fun revertQuestionToTts() {
+        val context = getApplication<Application>()
+        val rel = _relationship.value.trim().ifBlank { "가족" }
+        val text = "${rel}는 어디 있을까요?"
+        val file = File(context.filesDir, "audio_question_tts_${System.currentTimeMillis()}.wav")
+        viewModelScope.launch {
+            if (TtsSynthesizer.synthesizeOrBeep(context, text, file, 440.0)) {
+                _questionAudioPath.value = file.absolutePath
+            } else {
+                _recordingError.value = "TTS 음성을 만들 수 없습니다."
+            }
+        }
+    }
+
+    /** 정답 반응(공통)을 TTS로 되돌린다. */
+    fun revertCorrectToTts() {
+        val context = getApplication<Application>()
+        viewModelScope.launch {
+            if (TtsSynthesizer.synthesizeOrBeep(context, "잘했어요!", globalCorrectFile, 880.0)) {
+                _correctAudioPath.value = globalCorrectFile.absolutePath
+            } else {
+                _recordingError.value = "TTS 음성을 만들 수 없습니다."
+            }
+        }
+    }
+
+    /** 오답 반응(공통)을 TTS로 되돌린다. */
+    fun revertIncorrectToTts() {
+        val context = getApplication<Application>()
+        viewModelScope.launch {
+            if (TtsSynthesizer.synthesizeOrBeep(context, "다시 해 볼까요?", globalIncorrectFile, 247.0)) {
+                _incorrectAudioPath.value = globalIncorrectFile.absolutePath
+            } else {
+                _recordingError.value = "TTS 음성을 만들 수 없습니다."
+            }
+        }
     }
 
     /**

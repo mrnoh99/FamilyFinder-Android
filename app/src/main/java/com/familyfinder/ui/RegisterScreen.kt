@@ -34,6 +34,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Delete
@@ -109,6 +110,9 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
         if (editingId != null) scrollState.animateScrollTo(0)
     }
 
+    // "추가"를 눌렀을 때만 입력 폼을 표시 (편집 중에도 표시)
+    var showForm by rememberSaveable { mutableStateOf(false) }
+
     // 사진 크롭(확대/이동) 상태 — 사진이 바뀌면 초기화
     var photoScale by remember { mutableFloatStateOf(1f) }
     var photoOffsetX by remember { mutableFloatStateOf(0f) }
@@ -149,6 +153,7 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
 
     LaunchedEffect(saveSuccess) {
         if (saveSuccess) {
+            showForm = false
             snackbarHostState.showSnackbar("저장되었습니다! ✓")
             viewModel.clearSaveSuccess()
         }
@@ -198,6 +203,9 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     onHoldStart = { viewModel.startRecording(RegisterViewModel.RecordingType.CORRECT) },
                     onHoldEnd = viewModel::stopRecording
                 )
+                TextButton(onClick = { viewModel.revertCorrectToTts() }) {
+                    Text("🔊 TTS(기계음)로 되돌리기")
+                }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -216,6 +224,9 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     onHoldStart = { viewModel.startRecording(RegisterViewModel.RecordingType.INCORRECT) },
                     onHoldEnd = viewModel::stopRecording
                 )
+                TextButton(onClick = { viewModel.revertIncorrectToTts() }) {
+                    Text("🔊 TTS(기계음)로 되돌리기")
+                }
             }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
@@ -229,12 +240,28 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
             }
             val canSave = missing.isEmpty()
 
-            Text(
-                text = if (editingId != null) "가족 정보 수정" else "가족 등록",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
+            // 제목 + "추가" 버튼 (누르면 입력 폼이 열린다)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = if (editingId != null) "가족 정보 수정" else "가족 등록",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+                Button(onClick = {
+                    viewModel.cancelEditing()
+                    showForm = true
+                }) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("추가")
+                }
+            }
 
             Text(
                 text = "등록된 가족: ${allMembers.size}명 ${if (allMembers.size < 4) "(게임을 시작하려면 4명 이상 필요)" else "✓ 게임 가능!"}",
@@ -242,8 +269,8 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                 color = if (allMembers.size >= 4) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
             )
 
-            // 편집 모드 안내 배너
-            if (editingId != null) {
+            // "추가"를 눌렀거나 가족을 선택(편집)했을 때만 입력 폼을 보여준다.
+            if (showForm || editingId != null) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -258,17 +285,19 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "편집 중 — 수정 후 저장하세요",
+                            text = if (editingId != null) "편집 중 — 수정 후 저장하세요" else "새 가족 추가 중",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
-                        TextButton(onClick = { viewModel.cancelEditing() }) {
-                            Text("새 가족 등록")
+                        TextButton(onClick = {
+                            viewModel.cancelEditing()
+                            showForm = false
+                        }) {
+                            Text("닫기")
                         }
                     }
                 }
-            }
 
             // 1. 관계 입력 — 자주 쓰는 호칭을 칩으로 고르거나 직접 입력
             SectionCard(title = "1. 관계 입력", done = relationship.isNotBlank()) {
@@ -408,6 +437,9 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     onHoldStart = { viewModel.startRecording(RegisterViewModel.RecordingType.QUESTION) },
                     onHoldEnd = viewModel::stopRecording
                 )
+                TextButton(onClick = { viewModel.revertQuestionToTts() }) {
+                    Text("🔊 TTS(기계음)로 되돌리기")
+                }
             }
 
             // 입력 상태 체크리스트 — 무엇이 채워졌는지 한눈에 보여줌
@@ -453,6 +485,7 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     fontWeight = FontWeight.Bold
                 )
             }
+            } // 입력 폼 끝
 
             // 등록된 가족 목록 — 탭하면 편집
             if (allMembers.isNotEmpty()) {
