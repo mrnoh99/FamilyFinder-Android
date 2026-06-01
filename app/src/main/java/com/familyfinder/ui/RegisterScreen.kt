@@ -3,6 +3,7 @@ package com.familyfinder.ui
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.media.MediaPlayer
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -76,6 +78,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -169,18 +172,12 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
         }
     }
 
-    androidx.compose.material3.Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(paddingValues)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // ── 공통 반응 음성 패널 (가족 등록 위 · 한 번만 녹음하면 전체 공통) ──
+    val isLandscape =
+        LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val reactionScrollState = rememberScrollState()
+
+    // 공통 반응(정답/오답) 녹음 패널
+    val reactionPanel: @Composable () -> Unit = {
             SectionCard(
                 title = "정답·오답 칭찬 녹음"
             ) {
@@ -216,9 +213,10 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     onRevertToTts = { viewModel.revertIncorrectToTts() }
                 )
             }
+    }
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
+    // 가족 등록 패널(제목·버튼·입력 폼·가족 목록)
+    val familyPanel: @Composable () -> Unit = {
             val missing = buildList {
                 if (relationship.isBlank()) add("관계")
                 if (photoUri == null) add("사진")
@@ -530,8 +528,55 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     }
                 }
             }
+    }
 
-            Spacer(modifier = Modifier.height(16.dp))
+    androidx.compose.material3.Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { paddingValues ->
+        if (isLandscape) {
+            // 가로 모드: 공통 반응 패널과 가족 등록 패널을 좌우로 나란히 배치
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .verticalScroll(reactionScrollState),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    reactionPanel()
+                }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .verticalScroll(scrollState),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    familyPanel()
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            }
+        } else {
+            // 세로 모드: 위아래로 쌓아서 배치
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(paddingValues)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                reactionPanel()
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                familyPanel()
+                Spacer(modifier = Modifier.height(16.dp))
+            }
         }
     }
 }
