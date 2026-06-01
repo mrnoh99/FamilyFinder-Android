@@ -399,12 +399,6 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
 
             // 3. 질문 녹음
             SectionCard(title = "3. 질문 녹음", done = questionAudioPath != null) {
-                Text(
-                    text = "예: \"해준아, 엄마 어딨어?\"",
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
                 ReactionAudioPanel(
                     label = "질문 녹음",
                     example = "해준아, 엄마 어딨어?",
@@ -412,6 +406,7 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     hasRecording = questionAudioPath != null,
                     isRecorded = questionRecorded,
                     audioPath = questionAudioPath,
+                    allowTts = false,
                     hasRecordPermission = hasRecordPermission,
                     onRequestPermission = onRequestPermission,
                     onHoldStart = { viewModel.startRecording(RegisterViewModel.RecordingType.QUESTION) },
@@ -631,6 +626,7 @@ private fun ReactionAudioPanel(
     isRecorded: Boolean,
     audioPath: String?,
     signalResId: Int? = null,
+    allowTts: Boolean = true,
     hasRecordPermission: () -> Boolean,
     onRequestPermission: () -> Unit,
     onHoldStart: () -> Boolean,
@@ -650,7 +646,7 @@ private fun ReactionAudioPanel(
 
         if (!hasRecording) {
             Text(
-                text = "없음 (TTS)",
+                text = if (allowTts) "없음 (TTS)" else "없음 (직접 녹음 필요)",
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -760,18 +756,20 @@ private fun ReactionAudioPanel(
                     Text("듣기", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 }
 
-                Button(
-                    onClick = onRevertToTts,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF616161),
-                        contentColor = Color.White
-                    ),
-                    shape = RoundedCornerShape(50)
-                ) {
-                    Text("TTS로 돌아가기", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                if (allowTts) {
+                    Button(
+                        onClick = onRevertToTts,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF616161),
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(50)
+                    ) {
+                        Text("TTS로 돌아가기", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    }
                 }
             }
         }

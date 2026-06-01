@@ -125,21 +125,23 @@ fun GameScreen(viewModel: GameViewModel) {
             }
 
             isLandscape -> {
-                // 가로 모드: 왼쪽 2x2 그리드 + 오른쪽 컨트롤
-                Row(
+                // 가로 모드: 제목 아래에 사진을 한 줄(1x4)로 나란히 배치
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    GameTitle()
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxHeight(),
+                            .fillMaxWidth(),
                         contentAlignment = Alignment.Center
                     ) {
                         if (currentSet.size == 4 && targetMember != null) {
-                            SquarePhotoGrid(
+                            PhotoRowStrip(
                                 members = currentSet,
                                 selectedMemberId = selectedMemberId,
                                 targetMemberId = targetMember!!.id,
@@ -147,16 +149,6 @@ fun GameScreen(viewModel: GameViewModel) {
                                 onSelectMember = viewModel::selectMember
                             )
                         }
-                    }
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        GameTitle()
-                        Spacer(modifier = Modifier.weight(1f))
                     }
                 }
             }
@@ -485,6 +477,42 @@ fun SquarePhotoGrid(
             onSelectMember = onSelectMember,
             modifier = Modifier.size(side)
         )
+    }
+}
+
+/**
+ * 가로 모드 전용: 사진을 한 줄(1xN)로 나란히 배치한다. 각 사진은 정사각형으로,
+ * 사용 가능한 높이와 너비에 맞춰 크기를 정해 화면 밖으로 넘치지 않게 한다.
+ */
+@Composable
+fun PhotoRowStrip(
+    members: List<FamilyMember>,
+    selectedMemberId: Int?,
+    targetMemberId: Int,
+    gameResult: GameResult,
+    onSelectMember: (FamilyMember) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.Center) {
+        val gap = 10.dp
+        val count = members.size.coerceAtLeast(1)
+        val side = minOf(maxHeight, (maxWidth - gap * (count - 1)) / count)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(gap),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.height(side)
+        ) {
+            members.forEach { member ->
+                PhotoCard(
+                    member = member,
+                    isSelected = selectedMemberId == member.id,
+                    isTarget = targetMemberId == member.id,
+                    gameResult = gameResult,
+                    onClick = { onSelectMember(member) },
+                    modifier = Modifier.fillMaxHeight()
+                )
+            }
+        }
     }
 }
 
