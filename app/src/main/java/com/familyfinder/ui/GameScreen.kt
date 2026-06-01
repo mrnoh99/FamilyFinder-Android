@@ -54,8 +54,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -202,16 +200,11 @@ fun GameScreen(viewModel: GameViewModel) {
  */
 @Composable
 private fun ResultOverlay(result: GameResult, interactive: Boolean, onNext: () -> Unit) {
-    val context = LocalContext.current
-    val name = when (result) {
-        GameResult.CORRECT -> "praise"
-        GameResult.INCORRECT -> "wrong"
+    val resId = when (result) {
+        GameResult.CORRECT -> R.drawable.praise
+        GameResult.INCORRECT -> R.drawable.wrong
         else -> return
     }
-    val resId = remember(name) {
-        context.resources.getIdentifier(name, "drawable", context.packageName)
-    }
-    if (resId == 0) return
 
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 

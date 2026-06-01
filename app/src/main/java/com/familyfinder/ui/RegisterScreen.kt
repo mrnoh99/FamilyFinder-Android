@@ -120,10 +120,10 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
     var showForm by rememberSaveable { mutableStateOf(false) }
 
     // 사진 크롭(확대/이동) 상태 — 사진이 바뀌면 초기화
-    var photoScale by remember { mutableFloatStateOf(1f) }
-    var photoOffsetX by remember { mutableFloatStateOf(0f) }
-    var photoOffsetY by remember { mutableFloatStateOf(0f) }
-    var photoBoxSizePx by remember { mutableIntStateOf(0) }
+    var photoScale by rememberSaveable { mutableFloatStateOf(1f) }
+    var photoOffsetX by rememberSaveable { mutableFloatStateOf(0f) }
+    var photoOffsetY by rememberSaveable { mutableFloatStateOf(0f) }
+    var photoBoxSizePx by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(photoUri) {
         photoScale = 1f
         photoOffsetX = 0f
