@@ -45,6 +45,17 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
     private val _incorrectAudioPath = MutableStateFlow<String?>(null)
     val incorrectAudioPath: StateFlow<String?> = _incorrectAudioPath
 
+    // 각 음성이 '사용자가 직접 녹음한' 것인지(true) TTS/시드 기계음인지(false) 구분한다.
+    // 듣기·TTS로 돌아가기 버튼은 사용자가 녹음한 음성이 있을 때만 보여주는 데 사용한다.
+    private val _questionRecorded = MutableStateFlow(false)
+    val questionRecorded: StateFlow<Boolean> = _questionRecorded
+
+    private val _correctRecorded = MutableStateFlow(false)
+    val correctRecorded: StateFlow<Boolean> = _correctRecorded
+
+    private val _incorrectRecorded = MutableStateFlow(false)
+    val incorrectRecorded: StateFlow<Boolean> = _incorrectRecorded
+
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording
 
@@ -72,11 +83,16 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
     private val globalCorrectFile = File(application.filesDir, "global_correct.wav")
     private val globalIncorrectFile = File(application.filesDir, "global_incorrect.wav")
 
+    // 공통 반응(정답/오답)의 '사용자 녹음 여부'는 앱 재시작 후에도 유지되도록 저장해 둔다.
+    private val prefs = application.getSharedPreferences("familyfinder", android.content.Context.MODE_PRIVATE)
+
     enum class RecordingType { QUESTION, CORRECT, INCORRECT }
 
     init {
         if (globalCorrectFile.exists()) _correctAudioPath.value = globalCorrectFile.absolutePath
         if (globalIncorrectFile.exists()) _incorrectAudioPath.value = globalIncorrectFile.absolutePath
+        _correctRecorded.value = prefs.getBoolean("correct_recorded", false) && globalCorrectFile.exists()
+        _incorrectRecorded.value = prefs.getBoolean("incorrect_recorded", false) && globalIncorrectFile.exists()
         // 예시 시드가 비동기로 공통 반응 파일을 만들면 이후에 반영한다(앱 재시작 불필요).
         viewModelScope.launch {
             allMembers.collect {
@@ -98,6 +114,10 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
         _questionAudioPath.value = member.questionAudioPath
         _correctAudioPath.value = member.correctAudioPath
         _incorrectAudioPath.value = member.incorrectAudioPath
+        // 파일명으로 사용자 녹음 여부를 추론한다(TTS/시드 파일에는 tts·seed 표식이 들어 있음).
+        _questionRecorded.value = member.questionAudioPath.let {
+            !it.contains("_tts_") && !it.contains("_seed_")
+        }
     }
 
     /** 편집을 취소하고 새 가족 등록 모드로 돌아간다. */
@@ -162,9 +182,20 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
             val ok = recorder.stopAndSave(file)
             if (ok) {
                 when (type) {
-                    RecordingType.QUESTION -> _questionAudioPath.value = file.absolutePath
-                    RecordingType.CORRECT -> _correctAudioPath.value = file.absolutePath
-                    RecordingType.INCORRECT -> _incorrectAudioPath.value = file.absolutePath
+                    RecordingType.QUESTION -> {
+                        _questionAudioPath.value = file.absolutePath
+                        _questionRecorded.value = true
+                    }
+                    RecordingType.CORRECT -> {
+                        _correctAudioPath.value = file.absolutePath
+                        _correctRecorded.value = true
+                        prefs.edit().putBoolean("correct_recorded", true).apply()
+                    }
+                    RecordingType.INCORRECT -> {
+                        _incorrectAudioPath.value = file.absolutePath
+                        _incorrectRecorded.value = true
+                        prefs.edit().putBoolean("incorrect_recorded", true).apply()
+                    }
                 }
             } else {
                 _recordingError.value = "녹음이 저장되지 않았습니다. 버튼을 누른 채 또렷이 말한 뒤 손을 떼주세요."
@@ -187,6 +218,7 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             if (TtsSynthesizer.synthesizeOrBeep(context, text, file, 440.0)) {
                 _questionAudioPath.value = file.absolutePath
+                _questionRecorded.value = false
             } else {
                 _recordingError.value = "TTS 음성을 만들 수 없습니다."
             }
@@ -199,6 +231,8 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             if (TtsSynthesizer.synthesizeOrBeep(context, "잘했어요!", globalCorrectFile, 880.0)) {
                 _correctAudioPath.value = globalCorrectFile.absolutePath
+                _correctRecorded.value = false
+                prefs.edit().putBoolean("correct_recorded", false).apply()
             } else {
                 _recordingError.value = "TTS 음성을 만들 수 없습니다."
             }
@@ -211,6 +245,8 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             if (TtsSynthesizer.synthesizeOrBeep(context, "다시 해 볼까요?", globalIncorrectFile, 247.0)) {
                 _incorrectAudioPath.value = globalIncorrectFile.absolutePath
+                _incorrectRecorded.value = false
+                prefs.edit().putBoolean("incorrect_recorded", false).apply()
             } else {
                 _recordingError.value = "TTS 음성을 만들 수 없습니다."
             }
@@ -393,6 +429,7 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
         _relationship.value = ""
         _photoUri.value = null
         _questionAudioPath.value = null
+        _questionRecorded.value = false
     }
 
     override fun onCleared() {

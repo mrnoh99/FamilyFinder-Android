@@ -54,13 +54,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -126,21 +123,23 @@ fun GameScreen(viewModel: GameViewModel) {
             }
 
             isLandscape -> {
-                // 가로 모드: 왼쪽 2x2 그리드 + 오른쪽 컨트롤
-                Row(
+                // 가로 모드: 제목 아래에 사진을 한 줄(1x4)로 나란히 배치
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    GameTitle()
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxHeight(),
+                            .fillMaxWidth(),
                         contentAlignment = Alignment.Center
                     ) {
                         if (currentSet.size == 4 && targetMember != null) {
-                            SquarePhotoGrid(
+                            PhotoRowStrip(
                                 members = currentSet,
                                 selectedMemberId = selectedMemberId,
                                 targetMemberId = targetMember!!.id,
@@ -148,16 +147,6 @@ fun GameScreen(viewModel: GameViewModel) {
                                 onSelectMember = viewModel::selectMember
                             )
                         }
-                    }
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        GameTitle()
-                        Spacer(modifier = Modifier.weight(1f))
                     }
                 }
             }
@@ -211,16 +200,13 @@ fun GameScreen(viewModel: GameViewModel) {
  */
 @Composable
 private fun ResultOverlay(result: GameResult, interactive: Boolean, onNext: () -> Unit) {
-    val context = LocalContext.current
-    val name = when (result) {
-        GameResult.CORRECT -> "praise"
-        GameResult.INCORRECT -> "wrong"
+    val resId = when (result) {
+        GameResult.CORRECT -> R.drawable.praise
+        GameResult.INCORRECT -> R.drawable.wrong
         else -> return
     }
-    val resId = remember(name) {
-        context.resources.getIdentifier(name, "drawable", context.packageName)
-    }
-    if (resId == 0) return
+
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     // 아래 사진이 비치는 옅은 스크림 + 반투명 글래스 패널.
     // 음성이 끝나기 전(interactive=false)에는 터치를 막는다.
@@ -234,51 +220,93 @@ private fun ResultOverlay(result: GameResult, interactive: Boolean, onNext: () -
             },
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth(0.96f)
-                .clip(RoundedCornerShape(28.dp))
-                .background(Color.White.copy(alpha = 0.94f))
-                .border(2.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
-                .padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            if (result == GameResult.CORRECT) {
-                // 한글 문구로 영문 "PRAISE"를 대체하고, 이미지 위쪽 영문 부분은 크롭해 가린다.
-                Text(
-                    text = "참 잘했어요!",
-                    fontSize = 44.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color(0xFFE65100)
-                )
-                Image(
-                    painter = painterResource(resId),
-                    contentDescription = "정답",
-                    contentScale = ContentScale.Crop,
-                    alignment = Alignment.BottomCenter,
+        if (isLandscape) {
+            // 가로 모드: 이미지(좌) + 텍스트·버튼(우) 을 fillMaxHeight로 제한해 화면 밖으로 나가지 않게 한다.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth(0.96f)
+                    .fillMaxHeight(0.90f)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Color.White.copy(alpha = 0.94f))
+                    .border(2.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // 왼쪽: 이미지
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.92f)
-                        .aspectRatio(1.45f)
-                        .clipToBounds()
-                )
-            } else {
-                Image(
-                    painter = painterResource(resId),
-                    contentDescription = "오답",
-                    modifier = Modifier.fillMaxWidth(0.55f)
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (result == GameResult.CORRECT) {
+                        Image(
+                            painter = painterResource(resId),
+                            contentDescription = "정답",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Image(
+                            painter = painterResource(resId),
+                            contentDescription = "오답",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxHeight(0.85f)
+                        )
+                    }
+                }
+                // 오른쪽: 텍스트 + 다음 버튼
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    if (interactive) {
+                        NextButton(onClick = onNext)
+                    }
+                }
+            }
+        } else {
+            // 세로 모드: 기존 수직 레이아웃
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth(0.96f)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Color.White.copy(alpha = 0.94f))
+                    .border(2.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (result == GameResult.CORRECT) {
+                    // 그림에 "참 잘했어요!" 문구가 포함되어 있어 그림 전체를 그대로 보여준다.
+                    Image(
+                        painter = painterResource(resId),
+                        contentDescription = "정답",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxWidth(0.92f)
+                    )
+                } else {
+                    Image(
+                        painter = painterResource(resId),
+                        contentDescription = "오답",
+                        modifier = Modifier.fillMaxWidth(0.55f)
+                    )
+                }
+            }
+
+            // 음성이 끝나 터치가 가능해지면 btn_blue(다음)를 최상위로 띄운다.
+            if (interactive) {
+                NextButton(
+                    onClick = onNext,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 36.dp)
                 )
             }
-        }
-
-        // 음성이 끝나 터치가 가능해지면 btn_blue(다음)를 최상위로 띄운다.
-        if (interactive) {
-            NextButton(
-                onClick = onNext,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 36.dp)
-            )
         }
     }
 }
@@ -442,6 +470,42 @@ fun SquarePhotoGrid(
             onSelectMember = onSelectMember,
             modifier = Modifier.size(side)
         )
+    }
+}
+
+/**
+ * 가로 모드 전용: 사진을 한 줄(1xN)로 나란히 배치한다. 각 사진은 정사각형으로,
+ * 사용 가능한 높이와 너비에 맞춰 크기를 정해 화면 밖으로 넘치지 않게 한다.
+ */
+@Composable
+fun PhotoRowStrip(
+    members: List<FamilyMember>,
+    selectedMemberId: Int?,
+    targetMemberId: Int,
+    gameResult: GameResult,
+    onSelectMember: (FamilyMember) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.Center) {
+        val gap = 10.dp
+        val count = members.size.coerceAtLeast(1)
+        val side = minOf(maxHeight, (maxWidth - gap * (count - 1)) / count)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(gap),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.height(side)
+        ) {
+            members.forEach { member ->
+                PhotoCard(
+                    member = member,
+                    isSelected = selectedMemberId == member.id,
+                    isTarget = targetMemberId == member.id,
+                    gameResult = gameResult,
+                    onClick = { onSelectMember(member) },
+                    modifier = Modifier.fillMaxHeight()
+                )
+            }
+        }
     }
 }
 
