@@ -60,7 +60,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -260,11 +259,8 @@ private fun ResultOverlay(result: GameResult, interactive: Boolean, onNext: () -
                         Image(
                             painter = painterResource(resId),
                             contentDescription = "정답",
-                            contentScale = ContentScale.Crop,
-                            alignment = Alignment.BottomCenter,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clipToBounds()
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize()
                         )
                     } else {
                         Image(
@@ -283,17 +279,7 @@ private fun ResultOverlay(result: GameResult, interactive: Boolean, onNext: () -
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    if (result == GameResult.CORRECT) {
-                        Text(
-                            text = "참 잘했어요!",
-                            fontSize = 30.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFFE65100),
-                            textAlign = TextAlign.Center
-                        )
-                    }
                     if (interactive) {
-                        Spacer(modifier = Modifier.height(16.dp))
                         NextButton(onClick = onNext)
                     }
                 }
@@ -311,22 +297,12 @@ private fun ResultOverlay(result: GameResult, interactive: Boolean, onNext: () -
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (result == GameResult.CORRECT) {
-                    // 한글 문구로 영문 "PRAISE"를 대체하고, 이미지 위쪽 영문 부분은 크롭해 가린다.
-                    Text(
-                        text = "참 잘했어요!",
-                        fontSize = 44.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFFE65100)
-                    )
+                    // 그림에 "참 잘했어요!" 문구가 포함되어 있어 그림 전체를 그대로 보여준다.
                     Image(
                         painter = painterResource(resId),
                         contentDescription = "정답",
-                        contentScale = ContentScale.Crop,
-                        alignment = Alignment.BottomCenter,
-                        modifier = Modifier
-                            .fillMaxWidth(0.92f)
-                            .aspectRatio(1.45f)
-                            .clipToBounds()
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxWidth(0.92f)
                     )
                 } else {
                     Image(

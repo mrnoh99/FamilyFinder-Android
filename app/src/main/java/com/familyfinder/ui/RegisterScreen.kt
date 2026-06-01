@@ -14,7 +14,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -26,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -42,7 +42,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
@@ -83,6 +82,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.familyfinder.R
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -95,6 +95,9 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
     val incorrectAudioPath by viewModel.incorrectAudioPath.collectAsStateWithLifecycle()
     val isRecording by viewModel.isRecording.collectAsStateWithLifecycle()
     val currentRecordingType by viewModel.currentRecordingType.collectAsStateWithLifecycle()
+    val questionRecorded by viewModel.questionRecorded.collectAsStateWithLifecycle()
+    val correctRecorded by viewModel.correctRecorded.collectAsStateWithLifecycle()
+    val incorrectRecorded by viewModel.incorrectRecorded.collectAsStateWithLifecycle()
     val allMembers by viewModel.allMembers.collectAsStateWithLifecycle(emptyList())
     val saveSuccess by viewModel.saveSuccess.collectAsStateWithLifecycle()
     val recordingError by viewModel.recordingError.collectAsStateWithLifecycle()
@@ -179,21 +182,16 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
         ) {
             // ── 공통 반응 음성 패널 (가족 등록 위 · 한 번만 녹음하면 전체 공통) ──
             SectionCard(
-                title = "공통 반응 음성 (모든 가족 공통 · 한 번만 녹음)",
-                done = correctAudioPath != null && incorrectAudioPath != null
+                title = "정답·오답 칭찬 녹음"
             ) {
-                Text(
-                    text = "먼저 한 번만 녹음하면 모든 가족 게임에서 함께 사용됩니다.",
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
                 ReactionAudioPanel(
-                    label = "정답 반응",
+                    label = "정답 칭찬",
                     example = "잘 했어요! 맞아요!",
                     isCurrentlyRecording = isRecording && currentRecordingType == RegisterViewModel.RecordingType.CORRECT,
                     hasRecording = correctAudioPath != null,
+                    isRecorded = correctRecorded,
                     audioPath = correctAudioPath,
+                    signalResId = R.raw.signal_correct,
                     hasRecordPermission = hasRecordPermission,
                     onRequestPermission = onRequestPermission,
                     onHoldStart = { viewModel.startRecording(RegisterViewModel.RecordingType.CORRECT) },
@@ -208,7 +206,9 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     example = "아닌데~ 다시 봐봐!",
                     isCurrentlyRecording = isRecording && currentRecordingType == RegisterViewModel.RecordingType.INCORRECT,
                     hasRecording = incorrectAudioPath != null,
+                    isRecorded = incorrectRecorded,
                     audioPath = incorrectAudioPath,
+                    signalResId = R.raw.signal_wrong,
                     hasRecordPermission = hasRecordPermission,
                     onRequestPermission = onRequestPermission,
                     onHoldStart = { viewModel.startRecording(RegisterViewModel.RecordingType.INCORRECT) },
@@ -237,6 +237,7 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                 Text(
                     text = if (editingId != null) "가족 정보 수정" else "가족 등록",
                     fontSize = 28.sp,
+                    lineHeight = 34.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f)
@@ -264,35 +265,21 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
 
             Text(
                 text = "등록된 가족: ${allMembers.size}명 ${if (allMembers.size < 4) "(게임을 시작하려면 4명 이상 필요)" else "✓ 게임 가능!"}",
-                fontSize = 14.sp,
+                fontSize = 15.sp,
+                lineHeight = 21.sp,
+                fontWeight = FontWeight.Medium,
                 color = if (allMembers.size >= 4) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
             )
 
             // "추가"를 눌렀거나 가족을 선택(편집)했을 때만 입력 폼을 보여준다.
             if (showForm || editingId != null) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                    )
-                ) {
-                    Text(
-                        text = if (editingId != null) "편집 중 — 수정 후 저장하세요 (위 취소로 닫기)"
-                        else "새 가족 추가 중 (위 취소로 닫기)",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
-                    )
-                }
 
             // 1. 관계 입력 — 자주 쓰는 호칭을 칩으로 고르거나 직접 입력
             SectionCard(title = "1. 관계 입력", done = relationship.isNotBlank()) {
                 Text(
                     text = "아래에서 호칭을 고르거나 직접 입력하세요.",
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 RelationshipChips(
@@ -373,7 +360,8 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     }
                     Text(
                         text = "두 손가락으로 확대·이동해 얼굴을 맞춘 뒤 위의 \"사진 확정\"을 누르세요.",
-                        fontSize = 12.sp,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -412,15 +400,17 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
             // 3. 질문 녹음
             SectionCard(title = "3. 질문 녹음", done = questionAudioPath != null) {
                 Text(
-                    text = "예: \"해성아, 엄마 어딨어?\"",
-                    fontSize = 13.sp,
+                    text = "예: \"해준아, 엄마 어딨어?\"",
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 ReactionAudioPanel(
                     label = "질문 녹음",
-                    example = "해성아, 엄마 어딨어?",
+                    example = "해준아, 엄마 어딨어?",
                     isCurrentlyRecording = isRecording && currentRecordingType == RegisterViewModel.RecordingType.QUESTION,
                     hasRecording = questionAudioPath != null,
+                    isRecorded = questionRecorded,
                     audioPath = questionAudioPath,
                     hasRecordPermission = hasRecordPermission,
                     onRequestPermission = onRequestPermission,
@@ -428,15 +418,6 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     onHoldEnd = viewModel::stopRecording,
                     onRevertToTts = { viewModel.revertQuestionToTts() }
                 )
-            }
-
-            // 입력 상태 체크리스트 — 무엇이 채워졌는지 한눈에 보여줌
-            SectionCard(title = "입력 상태") {
-                StatusRow("관계", relationship.isNotBlank())
-                StatusRow("사진", photoUri != null)
-                StatusRow("질문 녹음", questionAudioPath != null)
-                StatusRow("정답 반응 (공통)", correctAudioPath != null)
-                StatusRow("오답 반응 (공통)", incorrectAudioPath != null)
             }
 
             // 하단 등록 버튼 — 전체 내용을 확정해 가족을 등록/수정
@@ -459,7 +440,11 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
+                    .heightIn(min = 56.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    horizontal = 16.dp,
+                    vertical = 10.dp
+                ),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (canSave) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline
                 )
@@ -467,11 +452,21 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                 Icon(Icons.Default.Save, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 val saveLabel = if (editingId != null) "수정 저장" else "가족 등록"
-                Text(
-                    text = if (canSave) saveLabel else "$saveLabel (미완료)",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Column {
+                    Text(
+                        text = saveLabel,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (!canSave) {
+                        Text(
+                            text = "미완료: " + missing.joinToString(", "),
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
             }
             } // 입력 폼 끝
 
@@ -505,7 +500,7 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = member.relationship,
-                                    fontSize = 16.sp,
+                                    fontSize = 18.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Row(
@@ -520,7 +515,7 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                                     )
                                     Text(
                                         text = if (isBeingEdited) "편집 중" else "탭하여 편집",
-                                        fontSize = 12.sp,
+                                        fontSize = 13.sp,
                                         color = if (isBeingEdited) MaterialTheme.colorScheme.primary
                                         else Color(0xFF4CAF50)
                                     )
@@ -578,28 +573,6 @@ private fun createCameraImageUri(context: Context): Uri {
 }
 
 @Composable
-private fun StatusRow(label: String, done: Boolean) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Icon(
-            imageVector = if (done) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-            contentDescription = null,
-            tint = if (done) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline,
-            modifier = Modifier.size(18.dp)
-        )
-        Text(
-            text = label,
-            fontSize = 14.sp,
-            fontWeight = if (done) FontWeight.Medium else FontWeight.Normal,
-            color = if (done) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
 fun SectionCard(
     title: String,
     done: Boolean = false,
@@ -621,8 +594,9 @@ fun SectionCard(
             ) {
                 Text(
                     text = title,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 18.sp,
+                    lineHeight = 24.sp,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
                 if (done) {
@@ -654,7 +628,9 @@ private fun ReactionAudioPanel(
     example: String,
     isCurrentlyRecording: Boolean,
     hasRecording: Boolean,
+    isRecorded: Boolean,
     audioPath: String?,
+    signalResId: Int? = null,
     hasRecordPermission: () -> Boolean,
     onRequestPermission: () -> Unit,
     onHoldStart: () -> Boolean,
@@ -662,63 +638,22 @@ private fun ReactionAudioPanel(
     onRevertToTts: () -> Unit
 ) {
     val primary = MaterialTheme.colorScheme.primary
+    val context = LocalContext.current
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             text = "$label  ·  예: \"$example\"",
-            fontSize = 13.sp,
+            fontSize = 15.sp,
+            lineHeight = 20.sp,
             fontWeight = FontWeight.Bold
         )
 
-        Text(
-            text = if (hasRecording) "저장됨" else "없음 (TTS)",
-            fontSize = 12.sp,
-            color = if (hasRecording) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        if (hasRecording && audioPath != null && !isCurrentlyRecording) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = {
-                        try {
-                            MediaPlayer().apply {
-                                setDataSource(audioPath)
-                                prepare()
-                                start()
-                                setOnCompletionListener { release() }
-                            }
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = primary),
-                    shape = RoundedCornerShape(50)
-                ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("듣기", fontWeight = FontWeight.SemiBold)
-                }
-
-                Button(
-                    onClick = onRevertToTts,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFE0E0E0),
-                        contentColor = Color(0xFF555555)
-                    ),
-                    shape = RoundedCornerShape(50)
-                ) {
-                    Text("TTS로 돌아가기", fontSize = 13.sp)
-                }
-            }
+        if (!hasRecording) {
+            Text(
+                text = "없음 (TTS)",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
 
         // Hold-to-record button (always visible)
@@ -739,7 +674,17 @@ private fun ReactionAudioPanel(
                             false
                         }
                         try {
-                            waitForUpOrCancellation()
+                            // 스크롤 컨테이너 안에서도 '누르는 동안' 제스처가 취소되지 않도록
+                            // 손가락 이동/떼기 이벤트를 직접 소비하며 손을 뗄 때까지 기다린다.
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id }
+                                if (change == null || !change.pressed) {
+                                    change?.consume()
+                                    break
+                                }
+                                change.consume()
+                            }
                         } finally {
                             if (started) onHoldEnd()
                         }
@@ -760,6 +705,74 @@ private fun ReactionAudioPanel(
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold
                 )
+            }
+        }
+
+        // 듣기·TTS로 돌아가기 버튼은 사용자가 직접 녹음한 음성이 있을 때만 보여준다.
+        if (isRecorded && audioPath != null && !isCurrentlyRecording) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        // 실제 게임과 동일하게 신호음(딩동/삑)을 먼저 들려준 뒤 반응 음성을 재생한다.
+                        val playReaction = {
+                            try {
+                                MediaPlayer().apply {
+                                    setDataSource(audioPath)
+                                    prepare()
+                                    start()
+                                    setOnCompletionListener { release() }
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        }
+                        if (signalResId != null) {
+                            try {
+                                val signal = MediaPlayer.create(context, signalResId)
+                                if (signal != null) {
+                                    signal.setOnCompletionListener {
+                                        it.release()
+                                        playReaction()
+                                    }
+                                    signal.start()
+                                } else {
+                                    playReaction()
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                playReaction()
+                            }
+                        } else {
+                            playReaction()
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = primary),
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("듣기", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                }
+
+                Button(
+                    onClick = onRevertToTts,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF616161),
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Text("TTS로 돌아가기", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                }
             }
         }
     }
