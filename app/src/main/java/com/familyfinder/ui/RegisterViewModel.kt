@@ -353,10 +353,6 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 
-    /**
-     * 미리보기(정사각 박스 + ContentScale.Crop + graphicsLayer scale/translation)와 동일한
-     * 변환으로 원본에서 보이는 정사각 영역을 잘라낸다.
-     */
     private fun cropSquare(
         src: Bitmap,
         scale: Float,
@@ -365,24 +361,8 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
         boxSizePx: Int,
     ): Bitmap {
         if (boxSizePx <= 0) return src
-        val bw = src.width
-        val bh = src.height
-        val cover = maxOf(boxSizePx / bw.toFloat(), boxSizePx / bh.toFloat())
-        val disp = cover * scale
-        if (disp <= 0f) return src
-        val left = boxSizePx / 2f - bw * disp / 2f + offsetX
-        val top = boxSizePx / 2f - bh * disp / 2f + offsetY
-
-        val sx0 = ((0 - left) / disp).coerceIn(0f, bw.toFloat())
-        val sy0 = ((0 - top) / disp).coerceIn(0f, bh.toFloat())
-        val sx1 = ((boxSizePx - left) / disp).coerceIn(0f, bw.toFloat())
-        val sy1 = ((boxSizePx - top) / disp).coerceIn(0f, bh.toFloat())
-
-        val x = sx0.roundToInt().coerceIn(0, bw - 1)
-        val y = sy0.roundToInt().coerceIn(0, bh - 1)
-        val w = (sx1 - sx0).roundToInt().coerceIn(1, bw - x)
-        val h = (sy1 - sy0).roundToInt().coerceIn(1, bh - y)
-        return Bitmap.createBitmap(src, x, y, w, h)
+        val rect = calculateCropRect(src.width, src.height, scale, offsetX, offsetY, boxSizePx)
+        return Bitmap.createBitmap(src, rect[0], rect[1], rect[2], rect[3])
     }
 
     private fun downscaleIfNeeded(bitmap: Bitmap, max: Int): Bitmap {
