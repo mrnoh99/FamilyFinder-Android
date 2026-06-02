@@ -22,8 +22,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         FamilyDatabase.getDatabase(application).familyDao()
     )
 
-    private val _currentSet = MutableStateFlow<List<FamilyMember>>(emptyList())
-    val currentSet: StateFlow<List<FamilyMember>> = _currentSet
+    // 항상 4칸. 등록 가족이 4명 미만이면 빈 칸(null)으로 채운다.
+    private val _currentSet = MutableStateFlow<List<FamilyMember?>>(emptyList())
+    val currentSet: StateFlow<List<FamilyMember?>> = _currentSet
 
     private val _targetMember = MutableStateFlow<FamilyMember?>(null)
     val targetMember: StateFlow<FamilyMember?> = _targetMember
@@ -80,12 +81,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun startGame() {
         viewModelScope.launch {
             val members = repository.allMembers.first()
-            if (members.size < 4) return@launch
+            // 가족이 1명 이상이면 진행한다.
+            //   1~3명: 등록된 가족으로 채우고 나머지 칸은 빈 칸(blank).
+            //   4명: 그대로 4명.
+            //   5명 이상: 무작위로 4명을 뽑는다.
+            // 패널은 항상 4칸을 유지한다.
+            if (members.isEmpty()) return@launch
 
             _hasPlayed.value = true
-            val set = members.shuffled().take(4)
-            val target = set.random()
-            _currentSet.value = set
+            val reals = members.shuffled().take(4)
+            val target = reals.random()
+            // 실제 가족 + 부족한 만큼의 빈 칸(null)을 섞어 항상 4칸을 만든다.
+            val slots: List<FamilyMember?> = (reals + List(4 - reals.size) { null }).shuffled()
+            _currentSet.value = slots
             _targetMember.value = target
             _gameResult.value = GameResult.NONE
             _selectedMemberId.value = null

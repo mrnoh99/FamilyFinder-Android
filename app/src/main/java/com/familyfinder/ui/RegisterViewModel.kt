@@ -16,6 +16,7 @@ import com.familyfinder.data.TtsSynthesizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -23,6 +24,11 @@ import java.io.FileOutputStream
 import kotlin.math.roundToInt
 
 class RegisterViewModel(application: Application) : AndroidViewModel(application) {
+
+    companion object {
+        /** 등록 가능한 가족의 최대 인원. */
+        const val MAX_MEMBERS = 50
+    }
 
     private val repository = FamilyRepository(
         FamilyDatabase.getDatabase(application).familyDao()
@@ -278,6 +284,12 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
         val editingId = _editingId.value
 
         viewModelScope.launch {
+            // 새 가족 등록일 때만 최대 인원(50명)을 넘지 않도록 막는다.
+            if (editingId == null && repository.allMembers.first().size >= MAX_MEMBERS) {
+                _recordingError.value = "최대 ${MAX_MEMBERS}명까지 등록할 수 있어요."
+                return@launch
+            }
+
             val photoFile = File(context.filesDir, "photo_${System.currentTimeMillis()}.jpg")
             val ok = withContext(Dispatchers.IO) {
                 runCatching {

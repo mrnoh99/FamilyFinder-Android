@@ -32,11 +32,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -58,10 +60,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -78,22 +82,29 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.familyfinder.R
+import com.familyfinder.audio.BgmController
 import kotlinx.coroutines.launch
 import java.io.File
 
 @Composable
-fun RegisterScreen(viewModel: RegisterViewModel) {
+fun RegisterScreen(
+    viewModel: RegisterViewModel,
+    bgmController: BgmController? = null,
+    onBack: () -> Unit = {},
+) {
     val relationship by viewModel.relationship.collectAsStateWithLifecycle()
     val photoUri by viewModel.photoUri.collectAsStateWithLifecycle()
     val questionAudioPath by viewModel.questionAudioPath.collectAsStateWithLifecycle()
@@ -113,6 +124,7 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
 
     // 편집 시작 시 폼이 보이도록 맨 위로 스크롤
     LaunchedEffect(editingId) {
@@ -201,11 +213,12 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
             SectionCard(
                 title = "정답·오답 칭찬 녹음"
             ) {
+                RecordingHint()
+
                 ReactionAudioPanel(
                     label = "정답 칭찬",
                     example = "잘 했어요! 맞아요!",
                     isCurrentlyRecording = isRecording && currentRecordingType == RegisterViewModel.RecordingType.CORRECT,
-                    hasRecording = correctAudioPath != null,
                     isRecorded = correctRecorded,
                     audioPath = correctAudioPath,
                     signalResId = R.raw.signal_correct,
@@ -222,7 +235,6 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     label = "오답 반응",
                     example = "아닌데~ 다시 봐봐!",
                     isCurrentlyRecording = isRecording && currentRecordingType == RegisterViewModel.RecordingType.INCORRECT,
-                    hasRecording = incorrectAudioPath != null,
                     isRecorded = incorrectRecorded,
                     audioPath = incorrectAudioPath,
                     signalResId = R.raw.signal_wrong,
@@ -233,6 +245,47 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     onRevertToTts = { viewModel.revertIncorrectToTts() }
                 )
             }
+    }
+
+    // 배경 음악 조절 패널(숫자세기 설정과 같은 방식: 켜기/끄기 + 볼륨)
+    val bgmPanel: @Composable () -> Unit = {
+        if (bgmController != null) {
+            SectionCard(title = "배경 음악") {
+                var bgmEnabled by remember { mutableStateOf(bgmController.isBgmEnabled()) }
+                var bgmVolume by remember { mutableFloatStateOf(bgmController.getBgmVolume()) }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "배경 음악 재생",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = bgmEnabled,
+                        onCheckedChange = { checked ->
+                            bgmEnabled = checked
+                            bgmController.setBgmEnabled(checked)
+                        }
+                    )
+                }
+                Slider(
+                    value = bgmVolume.coerceIn(0f, 1f),
+                    onValueChange = { v ->
+                        bgmVolume = v
+                        bgmController.setBgmVolume(v)
+                    },
+                    valueRange = 0f..1f,
+                    enabled = bgmEnabled
+                )
+                Text(
+                    text = "끄면 배경 음악만 멈춰요. 질문·정답·오답 음성은 그대로 들립니다.",
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 
     // 가족 등록 패널(제목·버튼·입력 폼·가족 목록)
@@ -261,11 +314,15 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     modifier = Modifier.weight(1f)
                 )
                 val formOpen = showForm || editingId != null
+                val atMax = allMembers.size >= RegisterViewModel.MAX_MEMBERS
                 Button(
                     onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         viewModel.cancelEditing()
                         showForm = !formOpen
                     },
+                    // 최대 인원(50명)에 도달하면 새로 추가하지 못하게 막는다(취소는 가능).
+                    enabled = formOpen || !atMax,
                     colors = if (formOpen) {
                         ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                     } else {
@@ -282,11 +339,15 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
             }
 
             Text(
-                text = "등록된 가족: ${allMembers.size}명 ${if (allMembers.size < 4) "(게임을 시작하려면 4명 이상 필요)" else "✓ 게임 가능!"}",
+                text = buildString {
+                    append("등록된 가족: ${allMembers.size} / ${RegisterViewModel.MAX_MEMBERS}명")
+                    append(if (allMembers.size < 2) " (게임을 시작하려면 2명 이상 필요)" else " ✓ 게임 가능!")
+                    if (allMembers.size >= RegisterViewModel.MAX_MEMBERS) append(" · 최대 인원에 도달했어요")
+                },
                 fontSize = 15.sp,
                 lineHeight = 21.sp,
                 fontWeight = FontWeight.Medium,
-                color = if (allMembers.size >= 4) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
+                color = if (allMembers.size >= 2) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
             )
 
             // "추가"를 눌렀거나 가족을 선택(편집)했을 때만 입력 폼을 보여준다.
@@ -417,14 +478,14 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
 
             // 3. 질문 녹음
             SectionCard(title = "3. 질문 녹음", done = questionAudioPath != null) {
+                RecordingHint()
+
                 ReactionAudioPanel(
                     label = "질문 녹음",
                     example = "해준아, 엄마 어딨어?",
                     isCurrentlyRecording = isRecording && currentRecordingType == RegisterViewModel.RecordingType.QUESTION,
-                    hasRecording = questionAudioPath != null,
                     isRecorded = questionRecorded,
                     audioPath = questionAudioPath,
-                    allowTts = false,
                     hasRecordPermission = hasRecordPermission,
                     onRequestPermission = onRequestPermission,
                     onHoldStart = { viewModel.startRecording(RegisterViewModel.RecordingType.QUESTION) },
@@ -436,6 +497,7 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
             // 하단 등록 버튼 — 전체 내용을 확정해 가족을 등록/수정
             Button(
                 onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     if (canSave) {
                         viewModel.saveMember(
                             photoScale = photoScale,
@@ -551,6 +613,7 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
     }
 
     androidx.compose.material3.Scaffold(
+        topBar = { RegisterHeader(onBack = onBack) },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
         if (isLandscape) {
@@ -579,6 +642,7 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     familyPanel()
+                    bgmPanel()
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
@@ -595,9 +659,64 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
                 reactionPanel()
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                 familyPanel()
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                bgmPanel()
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
+    }
+}
+
+/** 가족찾기 아이콘과 어울리는 따뜻한 주황 강조색 (NumberCount 앱의 AppOrange와 동일 계열). */
+private val RegisterAccent = Color(0xFFE08600)
+
+/**
+ * NumberCount 앱의 설정 화면 헤더와 같은 스타일: 왼쪽에 뒤로가기 화살표 + "뒤로" 라벨(강조색),
+ * 가운데에 화면 제목. 상태바 영역을 침범하지 않도록 statusBarsPadding 을 적용한다.
+ */
+@Composable
+private fun RegisterHeader(onBack: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .clickable {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onBack()
+                }
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "뒤로",
+                tint = RegisterAccent,
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = "뒤로",
+                color = RegisterAccent,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+            )
+        }
+        Spacer(modifier = Modifier.weight(1f))
+        Text(
+            text = "가족 등록",
+            color = RegisterAccent,
+            fontWeight = FontWeight.Bold,
+            fontSize = 20.sp,
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        // 좌측 뒤로가기 버튼 너비만큼 비워 제목을 가운데로 맞춘다.
+        Spacer(modifier = Modifier.width(84.dp))
     }
 }
 
@@ -677,21 +796,30 @@ fun SectionCard(
     }
 }
 
+/** 녹음 방법 안내 문구(숫자세기 설정 화면과 동일한 안내). */
+@Composable
+private fun RecordingHint() {
+    Text(
+        text = "버튼을 누르는 동안만 녹음됩니다. 손을 떼면 앞뒤 무음이 잘리고 녹음됩니다. 조용한 곳에서 녹음해 주세요.",
+        fontSize = 13.sp,
+        lineHeight = 19.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
 /**
- * Reaction audio panel (정답/오답 반응):
- * - No recording → status "없음 (TTS)" + full-width hold-to-record button
- * - Has recording → status "저장됨" + [듣기] [TTS로 돌아가기] row + hold-to-record button below
+ * Reaction audio panel (정답/오답/질문 반응) — 숫자세기(NumberCount) 설정 화면과 동일한 방식:
+ * - 녹음이 없으면 → "누르는 동안 녹음" 버튼만 표시
+ * - 직접 녹음한 음성이 있으면 → [재생] [삭제] 버튼만 표시(삭제하면 TTS로 되돌아감)
  */
 @Composable
 private fun ReactionAudioPanel(
     label: String,
     example: String,
     isCurrentlyRecording: Boolean,
-    hasRecording: Boolean,
     isRecorded: Boolean,
     audioPath: String?,
     signalResId: Int? = null,
-    allowTts: Boolean = true,
     hasRecordPermission: () -> Boolean,
     onRequestPermission: () -> Unit,
     onHoldStart: () -> Boolean,
@@ -700,6 +828,7 @@ private fun ReactionAudioPanel(
 ) {
     val primary = MaterialTheme.colorScheme.primary
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
@@ -709,74 +838,15 @@ private fun ReactionAudioPanel(
             fontWeight = FontWeight.Bold
         )
 
-        if (!hasRecording) {
-            Text(
-                text = if (allowTts) "없음 (TTS)" else "없음 (직접 녹음 필요)",
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        // Hold-to-record button (always visible)
-        val recordBg = if (isCurrentlyRecording) Color(0xFFE53935) else primary.copy(alpha = 0.12f)
-        val recordTextColor = if (isCurrentlyRecording) Color.White else primary
-
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .pointerInput(Unit) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        down.consume()
-                        val started = if (hasRecordPermission()) {
-                            onHoldStart()
-                        } else {
-                            onRequestPermission()
-                            false
-                        }
-                        try {
-                            // 스크롤 컨테이너 안에서도 '누르는 동안' 제스처가 취소되지 않도록
-                            // 손가락 이동/떼기 이벤트를 직접 소비하며 손을 뗄 때까지 기다린다.
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                val change = event.changes.firstOrNull { it.id == down.id }
-                                if (change == null || !change.pressed) {
-                                    change?.consume()
-                                    break
-                                }
-                                change.consume()
-                            }
-                        } finally {
-                            if (started) onHoldEnd()
-                        }
-                    }
-                },
-            shape = RoundedCornerShape(50),
-            colors = CardDefaults.cardColors(containerColor = recordBg)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = if (isCurrentlyRecording) "녹음 중..." else "누르는 동안 녹음",
-                    color = recordTextColor,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
-
-        // 듣기·TTS로 돌아가기 버튼은 사용자가 직접 녹음한 음성이 있을 때만 보여준다.
         if (isRecorded && audioPath != null && !isCurrentlyRecording) {
+            // 직접 녹음한 음성이 있으면 [재생] [삭제]만 보여준다. 삭제하면 TTS로 되돌아간다.
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
                     onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         // 실제 게임과 동일하게 신호음(딩동/삑)을 먼저 들려준 뒤 반응 음성을 재생한다.
                         val playReaction = {
                             val mp = MediaPlayer()
@@ -817,23 +887,80 @@ private fun ReactionAudioPanel(
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("듣기", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text("재생", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 }
 
-                if (allowTts) {
-                    Button(
-                        onClick = onRevertToTts,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF616161),
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(50)
-                    ) {
-                        Text("TTS로 돌아가기", fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                    }
+                Button(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onRevertToTts()
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFE53935),
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("삭제", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        } else {
+            // 녹음이 없으면 "누르는 동안 녹음" 버튼만 보여준다.
+            val recordBg = if (isCurrentlyRecording) Color(0xFFE53935) else primary.copy(alpha = 0.12f)
+            val recordTextColor = if (isCurrentlyRecording) Color.White else primary
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            down.consume()
+                            val started = if (hasRecordPermission()) {
+                                onHoldStart().also { ok ->
+                                    if (ok) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                }
+                            } else {
+                                onRequestPermission()
+                                false
+                            }
+                            try {
+                                // 스크롤 컨테이너 안에서도 '누르는 동안' 제스처가 취소되지 않도록
+                                // 손가락 이동/떼기 이벤트를 직접 소비하며 손을 뗄 때까지 기다린다.
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val change = event.changes.firstOrNull { it.id == down.id }
+                                    if (change == null || !change.pressed) {
+                                        change?.consume()
+                                        break
+                                    }
+                                    change.consume()
+                                }
+                            } finally {
+                                if (started) onHoldEnd()
+                            }
+                        }
+                    },
+                shape = RoundedCornerShape(50),
+                colors = CardDefaults.cardColors(containerColor = recordBg)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (isCurrentlyRecording) "녹음 중..." else "누르는 동안 녹음",
+                        color = recordTextColor,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         }

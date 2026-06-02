@@ -19,6 +19,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
@@ -35,14 +36,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.NavigateNext
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -54,6 +57,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,16 +74,73 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import android.content.Context
 import android.content.res.Configuration
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
 import com.familyfinder.R
 import com.familyfinder.data.FamilyMember
 import java.io.File
 
+/** 가족찾기 아이콘과 어울리는 따뜻한 주황 강조색 (NumberCount 앱의 AppOrange와 동일 계열). */
+private val SettingsAccent = Color(0xFFE08600)
+
+/** 시스템 진동기를 가져온다(없으면 null). */
+private fun obtainVibrator(context: Context): Vibrator? =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+    } else {
+        @Suppress("DEPRECATION")
+        context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+    }
+
+/**
+ * 정답/오답에 따라 서로 다른 진동 패턴을 재생한다.
+ * - 정답: 가볍고 경쾌한 두 번의 짧은 진동
+ * - 오답: 묵직한 한 번의 긴 진동
+ */
+private fun vibrateForResult(context: Context, result: GameResult) {
+    val vibrator = obtainVibrator(context)?.takeIf { it.hasVibrator() } ?: return
+    val effect = when (result) {
+        GameResult.CORRECT -> VibrationEffect.createWaveform(longArrayOf(0, 40, 80, 40), -1)
+        GameResult.INCORRECT -> VibrationEffect.createOneShot(220, VibrationEffect.DEFAULT_AMPLITUDE)
+        GameResult.NONE -> return
+    }
+    vibrator.vibrate(effect)
+}
+
+/** NumberCount 앱의 SettingsGear 스타일: 원형 + 옅은 강조색 배경의 설정 기어 버튼. */
 @Composable
-fun GameScreen(viewModel: GameViewModel) {
+private fun SettingsGear(onClick: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    Box(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(SettingsAccent.copy(alpha = 0.12f))
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onClick()
+            }
+            .padding(8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Settings,
+            contentDescription = "가족 등록",
+            tint = SettingsAccent,
+            modifier = Modifier.size(28.dp)
+        )
+    }
+}
+
+@Composable
+fun GameScreen(viewModel: GameViewModel, onOpenRegister: () -> Unit = {}) {
     val currentSet by viewModel.currentSet.collectAsStateWithLifecycle()
     val targetMember by viewModel.targetMember.collectAsStateWithLifecycle()
     val gameResult by viewModel.gameResult.collectAsStateWithLifecycle()
@@ -86,10 +150,20 @@ fun GameScreen(viewModel: GameViewModel) {
 
     val answered = gameResult != GameResult.NONE
 
-    // 가족이 4명 이상 준비되고 진행 중인 문제가 없으면 자동으로 시작한다.
+    // 정답/오답이 확정되는 순간 결과에 맞는 진동을 한 번 재생한다.
+    val context = LocalContext.current
+    LaunchedEffect(gameResult) {
+        if (gameResult != GameResult.NONE) {
+            vibrateForResult(context, gameResult)
+        }
+    }
+
+    // 가족이 1명 이상 준비되고 진행 중인 문제가 없으면 자동으로 시작한다.
     // (앱 첫 실행 시 씨딩이 끝난 뒤, 또는 가족 등록 화면에서 돌아왔을 때 자동 시작)
+    // 화면이 나타난 직후 바로 시작하지 않고 1초 뒤에 질문을 시작한다.
     LaunchedEffect(memberCount, currentSet.isEmpty()) {
-        if (memberCount >= 4 && currentSet.isEmpty()) {
+        if (memberCount >= 1 && currentSet.isEmpty()) {
+            delay(1000)
             viewModel.startGame()
         }
     }
@@ -106,49 +180,41 @@ fun GameScreen(viewModel: GameViewModel) {
                 )
             )
     ) {
-        when {
-            memberCount < 4 -> {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    GameTitle()
-                    Spacer(modifier = Modifier.height(24.dp))
-                    InsufficientMembersCard(memberCount)
-                }
+        // 전체를 safeDrawingPadding 안에 두어 상태바·내비게이션 바·노치를 모두 피한다.
+        // 설정 기어를 떠있는(overlay) 요소가 아니라 상단 바의 일반 레이아웃 요소로 배치하므로
+        // 가로/세로 어느 방향에서도 측면 내비게이션 바에 가려지지 않는다.
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
+        ) {
+            // 상단 바: 오른쪽 끝 설정 기어 → 가족 등록 화면으로 이동
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SettingsGear(onClick = onOpenRegister)
             }
 
-            else -> {
-                // 세로/가로 모두: 위에서 아래로 컨트롤 + 2x2 그리드.
-                // 방향이 바뀌어도 2x2 그리드와 각 패널의 1:1 비율을 그대로 유지해
-                // 사진의 좌우 비율이 변하지 않는다.
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    GameTitle()
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (currentSet.size == 4 && targetMember != null) {
-                            SquarePhotoGrid(
-                                members = currentSet,
-                                selectedMemberId = selectedMemberId,
-                                targetMemberId = targetMember!!.id,
-                                gameResult = gameResult,
-                                onSelectMember = viewModel::selectMember
-                            )
-                        }
-                    }
+            // 본문: 문제가 준비되면 항상 4칸 사진 그리드를 가운데 배치(빈 칸 포함).
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (currentSet.isNotEmpty() && targetMember != null) {
+                    SquarePhotoGrid(
+                        members = currentSet,
+                        selectedMemberId = selectedMemberId,
+                        targetMemberId = targetMember!!.id,
+                        gameResult = gameResult,
+                        onSelectMember = viewModel::selectMember
+                    )
                 }
             }
         }
@@ -242,56 +308,54 @@ private fun ResultOverlay(result: GameResult, interactive: Boolean, onNext: () -
                 }
             }
         } else {
-            // 세로 모드: 기존 수직 레이아웃
+            // 세로 모드: 정답/오답 그림(정답 feedback)은 가운데에 두고,
+            // 파란(다음) 버튼은 "그림 아래쪽 ~ 내비게이션 바" 사이의 정확히 1/2 지점에 놓는다.
+            // (위쪽 Spacer와 아래쪽 Box의 weight를 1:1로 두면, 그림은 가운데 정렬되고
+            //  아래 영역의 한가운데에 버튼이 오므로 그림과 내비게이션 바 사이 1/2 위치가 된다.)
             Column(
                 modifier = Modifier
-                    .fillMaxWidth(0.96f)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(Color.White.copy(alpha = 0.94f))
-                    .border(2.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
-                    .padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .fillMaxSize()
+                    .navigationBarsPadding(),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                Spacer(modifier = Modifier.weight(1f))
+
                 if (result == GameResult.CORRECT) {
-                    // 그림에 "참 잘했어요!" 문구가 포함되어 있어 그림 전체를 그대로 보여준다.
+                    // "참 잘했어요!" 그림은 자체 배경(크림색)이 있어 흰 테두리 없이 꽉 차게 보여준다.
                     Image(
                         painter = painterResource(resId),
                         contentDescription = "정답",
                         contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxWidth(0.92f)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp))
                     )
                 } else {
+                    // 오답 그림도 자체 배경(크림색)이 있어 흰 테두리 없이 꽉 차게 보여준다.
                     Image(
                         painter = painterResource(resId),
                         contentDescription = "오답",
-                        modifier = Modifier.fillMaxWidth(0.55f)
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp))
                     )
                 }
-            }
 
-            // 음성이 끝나 터치가 가능해지면 btn_blue(다음)를 최상위로 띄운다.
-            if (interactive) {
-                NextButton(
-                    onClick = onNext,
+                // 그림 아래 ~ 내비게이션 바 사이 영역. 그 한가운데(1/2)에 파란 버튼을 둔다.
+                Box(
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 36.dp)
-                )
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (interactive) {
+                        NextButton(onClick = onNext)
+                    }
+                }
             }
         }
     }
-}
-
-@Composable
-private fun GameTitle() {
-    Text(
-        text = "가족 찾기 🏠",
-        fontSize = 38.sp,
-        fontWeight = FontWeight.ExtraBold,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(top = 4.dp)
-    )
 }
 
 /** 올려주신 파란 버튼 이미지(btn_blue) 위에 글자를 얹은 어린이용 다음 버튼. */
@@ -301,10 +365,18 @@ private fun RoundGlossyButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptic = LocalHapticFeedback.current
     Box(
         modifier = modifier
             .size(160.dp)
-            .clickable(onClick = onClick),
+            // 포커스/터치 시 ripple·하이라이트(둥근 버튼 뒤 사각형 그림자)가 생기지 않도록 indication 제거.
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onClick()
+            },
         contentAlignment = Alignment.Center
     ) {
         Image(
@@ -326,44 +398,6 @@ private fun RoundGlossyButton(
 @Composable
 private fun NextButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     RoundGlossyButton(label = "", onClick = onClick, modifier = modifier)
-}
-
-
-@Composable
-fun InsufficientMembersCard(count: Int) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer
-        ),
-        shape = RoundedCornerShape(20.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Icon(
-                Icons.Default.FamilyRestroom,
-                contentDescription = null,
-                modifier = Modifier.size(72.dp),
-                tint = MaterialTheme.colorScheme.error
-            )
-            Text(
-                text = "가족을 4명 이상\n등록해 주세요!",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onErrorContainer
-            )
-            Text(
-                text = "현재 ${count}명 등록됨 (${4 - count}명 더 필요)",
-                fontSize = 15.sp,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onErrorContainer
-            )
-        }
-    }
 }
 
 @Composable
@@ -427,7 +461,7 @@ fun FeedbackCard(result: GameResult) {
  */
 @Composable
 fun SquarePhotoGrid(
-    members: List<FamilyMember>,
+    members: List<FamilyMember?>,
     selectedMemberId: Int?,
     targetMemberId: Int,
     gameResult: GameResult,
@@ -435,30 +469,64 @@ fun SquarePhotoGrid(
     modifier: Modifier = Modifier
 ) {
     val gap = 10.dp
+    // 패널은 항상 4칸. 빈 칸(null)은 빈 패널로 표시한다.
+    val count = members.size.coerceIn(1, 4)
     BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.Center) {
-        val side = minOf(maxWidth, maxHeight)
-        val cell = ((side - gap) / 2).coerceAtLeast(0.dp)
+        val w = maxWidth
+        val h = maxHeight
+        // 가능한 열 수(1..count) 중에서 정사각형 셀이 가장 커지는 배치를 고른다.
+        // 가로 모드처럼 폭이 넓고 높이가 낮으면 1행(예: 1x4)이 더 큰 사진을 주고,
+        // 세로 모드에서는 2x2가 더 큰 사진을 준다 — 자동으로 더 큰 쪽을 선택한다.
+        var cols = 1
+        var cell = 0.dp
+        for (c in 1..count) {
+            val r = (count + c - 1) / c
+            val candidate = minOf((w - gap * (c - 1)) / c, (h - gap * (r - 1)) / r)
+            if (candidate > cell) {
+                cell = candidate
+                cols = c
+            }
+        }
+        cell = cell.coerceAtLeast(0.dp)
+        val gridWidth = cell * cols + gap * (cols - 1)
         Column(
-            verticalArrangement = Arrangement.spacedBy(gap)
+            verticalArrangement = Arrangement.spacedBy(gap),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            members.chunked(2).forEach { rowMembers ->
+            members.chunked(cols).forEach { rowMembers ->
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(gap)
+                    modifier = Modifier.width(gridWidth),
+                    horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally)
                 ) {
                     rowMembers.forEach { member ->
-                        PhotoCard(
-                            member = member,
-                            isSelected = selectedMemberId == member.id,
-                            isTarget = targetMemberId == member.id,
-                            gameResult = gameResult,
-                            onClick = { onSelectMember(member) },
-                            modifier = Modifier.size(cell)
-                        )
+                        if (member != null) {
+                            PhotoCard(
+                                member = member,
+                                isSelected = selectedMemberId == member.id,
+                                isTarget = targetMemberId == member.id,
+                                gameResult = gameResult,
+                                onClick = { onSelectMember(member) },
+                                modifier = Modifier.size(cell)
+                            )
+                        } else {
+                            BlankPanel(modifier = Modifier.size(cell))
+                        }
                     }
                 }
             }
         }
     }
+}
+
+/** 등록된 가족이 4명보다 적을 때 그리드의 남는 칸을 채우는 빈 패널(선택 불가). */
+@Composable
+private fun BlankPanel(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0x11000000))
+    )
 }
 
 @Composable
@@ -483,8 +551,12 @@ fun PhotoCard(
         label = "card_scale"
     )
 
+    val haptic = LocalHapticFeedback.current
     Card(
-        onClick = onClick,
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onClick()
+        },
         modifier = modifier
             .aspectRatio(1f)
             .scale(cardScale)
