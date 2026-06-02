@@ -185,9 +185,8 @@ fun RegisterScreen(
         ActivityResultContracts.TakePicture()
     ) { success: Boolean -> if (success) cameraUri?.let { viewModel.setPhotoUri(it) } }
 
-    LaunchedEffect(Unit) {
-        permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-    }
+    // 마이크 권한은 화면 진입 시 무조건 요청하지 않는다. 사용자가 실제로 녹음(길게 누르기)을
+    // 시도할 때 hasRecordPermission()/onRequestPermission() 경로에서 필요 시에만 요청한다.
 
     LaunchedEffect(saveSuccess) {
         if (saveSuccess) {

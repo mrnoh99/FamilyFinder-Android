@@ -110,6 +110,16 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
                 }
             }
         }
+        // 이전 세션에서 남은 카메라/크롭 임시 파일(cacheDir)을 정리한다.
+        // 화면 생성 시점이라 진행 중인 캡처가 없고, 확정된 사진은 filesDir에 저장되므로 안전하다.
+        runCatching {
+            getApplication<Application>().cacheDir
+                .listFiles { f ->
+                    val n = f.name
+                    n.startsWith("camera_") || n.startsWith("crop_")
+                }
+                ?.forEach { it.delete() }
+        }
     }
 
     /** 목록에서 가족을 선택하면 그 내용을 폼에 불러와 편집 모드로 전환한다. */

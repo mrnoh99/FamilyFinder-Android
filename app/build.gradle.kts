@@ -12,15 +12,23 @@ android {
     defaultConfig {
         applicationId = "com.familyfinder"
         minSdk = 26
-        targetSdk = 34
+        // compileSdk(36)과 일치시켜 컴파일/런타임 타깃 불일치를 제거한다.
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            // R8 코드 축소 + 리소스 축소로 릴리스 APK 크기를 줄인다.
+            // (리소스 축소는 코드 축소가 켜져 있어야 동작한다.)
+            // ⚠️ 기기에서 릴리스 빌드 동작 검증 필요 — 여기서는 빌드(R8) 통과까지만 확인했다.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 

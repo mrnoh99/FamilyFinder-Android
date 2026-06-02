@@ -52,6 +52,9 @@ class WavRecorder(@Suppress("unused") private val context: Context) {
     private val isRecordingInternal = AtomicBoolean(false)
     private val pcmBytesBuffer = ByteArrayOutputStream()
     private val pcmLock = Any()
+    // stopAndSave()와 release()가 동시에 같은 AudioRecord를 잡아 이중 stop/release/use-after-release
+    // 하지 않도록, 레코더를 "꺼내고 필드를 비우는" 동작을 이 락으로 원자화한다(정확히 한 경로만 소유).
+    private val recordLock = Any()
 
     /** Caller must ensure RECORD_AUDIO permission is granted. Returns false if the mic is unavailable. */
     fun startRecording(scope: CoroutineScope): Boolean {
@@ -124,9 +127,16 @@ class WavRecorder(@Suppress("unused") private val context: Context) {
         isRecordingInternal.set(false)
         _isRecording.value = false
 
-        val job = recordJob
-        val record = audioRecord
-        recordJob = null
+        // 레코더 소유권을 원자적으로 가져온다. 필드를 즉시 비우므로, 동시에 release()가 호출돼도
+        // 그쪽은 null을 보고 아무것도 하지 않는다 → 이 경로가 record를 단독 소유한다.
+        val job: Job?
+        val record: AudioRecord?
+        synchronized(recordLock) {
+            job = recordJob
+            record = audioRecord
+            recordJob = null
+            audioRecord = null
+        }
 
         try {
             job?.join()
@@ -156,7 +166,6 @@ class WavRecorder(@Suppress("unused") private val context: Context) {
                 } catch (_: Exception) {
                 }
             }
-            audioRecord = null
         }
 
         val pcmBytes = synchronized(pcmLock) { pcmBytesBuffer.toByteArray() }
@@ -173,10 +182,17 @@ class WavRecorder(@Suppress("unused") private val context: Context) {
     fun release() {
         isRecordingInternal.set(false)
         _isRecording.value = false
-        recordJob?.cancel()
-        recordJob = null
-        val record = audioRecord
-        audioRecord = null
+        // stopAndSave()와 동일하게 락 안에서 소유권을 가져온다. 이미 stopAndSave()가 가져갔다면
+        // record는 null이라 여기서 다시 stop/release 하지 않는다(이중 release 방지).
+        val job: Job?
+        val record: AudioRecord?
+        synchronized(recordLock) {
+            job = recordJob
+            record = audioRecord
+            recordJob = null
+            audioRecord = null
+        }
+        job?.cancel()
         try { record?.stop() } catch (_: Exception) {}
         try { record?.release() } catch (_: Exception) {}
     }

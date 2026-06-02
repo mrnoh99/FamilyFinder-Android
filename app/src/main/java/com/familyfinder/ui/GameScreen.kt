@@ -1,14 +1,9 @@
 package com.familyfinder.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -33,7 +28,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -50,7 +44,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -396,59 +389,6 @@ private fun RoundGlossyButton(
 @Composable
 private fun NextButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     RoundGlossyButton(label = "", onClick = onClick, modifier = modifier)
-}
-
-@Composable
-fun FeedbackCard(result: GameResult) {
-    val infiniteTransition = rememberInfiniteTransition(label = "bounce")
-    val offsetY by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = -8f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(500),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "bounce_y"
-    )
-
-    ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .offset(y = offsetY.dp),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = if (result == GameResult.CORRECT)
-                Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
-        ),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 8.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = if (result == GameResult.CORRECT) "🎉" else "😅",
-                fontSize = 40.sp
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = if (result == GameResult.CORRECT) "잘 했어요!" else "아닌데~",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = if (result == GameResult.CORRECT) Color(0xFF2E7D32) else Color(0xFFC62828)
-                )
-                Text(
-                    text = if (result == GameResult.CORRECT) "정답이에요! 👍" else "다시 해봐요! 💪",
-                    fontSize = 15.sp,
-                    color = if (result == GameResult.CORRECT) Color(0xFF388E3C) else Color(0xFFD32F2F)
-                )
-            }
-        }
-    }
 }
 
 /**
