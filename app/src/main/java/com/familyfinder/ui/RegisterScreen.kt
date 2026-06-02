@@ -860,19 +860,30 @@ private fun ReactionAudioPanel(
                             }
                         }
                         if (signalResId != null) {
-                            try {
-                                val signal = MediaPlayer.create(context, signalResId)
-                                if (signal != null) {
-                                    signal.setOnCompletionListener {
-                                        it.release()
-                                        playReaction()
-                                    }
-                                    signal.start()
-                                } else {
+                            val signal = try {
+                                MediaPlayer.create(context, signalResId)
+                            } catch (e: Exception) {
+                                null
+                            }
+                            if (signal != null) {
+                                signal.setOnCompletionListener {
+                                    it.release()
                                     playReaction()
                                 }
-                            } catch (e: Exception) {
-                                e.printStackTrace()
+                                // 재생 중 오류가 나면 플레이어를 해제하고 반응 음성으로 넘어간다.
+                                // true를 반환해 onCompletion이 중복 호출되지 않게 한다.
+                                signal.setOnErrorListener { mp, _, _ ->
+                                    mp.release()
+                                    playReaction()
+                                    true
+                                }
+                                try {
+                                    signal.start()
+                                } catch (e: Exception) {
+                                    signal.release()
+                                    playReaction()
+                                }
+                            } else {
                                 playReaction()
                             }
                         } else {
