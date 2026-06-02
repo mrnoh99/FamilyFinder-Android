@@ -9,6 +9,7 @@ import com.familyfinder.data.FamilyDatabase
 import com.familyfinder.data.FamilyMember
 import com.familyfinder.data.FamilyRepository
 import com.familyfinder.data.SampleSeeder
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -98,8 +99,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             _gameResult.value = GameResult.NONE
             _selectedMemberId.value = null
             _resultPlaying.value = false
-            // 새 문제가 시작되면 질문 소리를 들려주고, 끝날 때까지 사진 선택을 막는다.
+            // 화면(사진 그리드)은 즉시 보여주고, 질문 소리만 1초 뒤에 재생한다.
+            // 질문 소리가 끝날 때까지 사진 선택은 막는다.
             _questionPlaying.value = true
+            delay(1000)
             playAudio(target.questionAudioPath) { _questionPlaying.value = false }
         }
     }

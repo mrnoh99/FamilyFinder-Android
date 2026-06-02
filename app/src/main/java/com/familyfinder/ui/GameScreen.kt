@@ -83,7 +83,6 @@ import android.os.VibratorManager
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
-import kotlinx.coroutines.delay
 import com.familyfinder.R
 import com.familyfinder.data.FamilyMember
 import java.io.File
@@ -160,10 +159,9 @@ fun GameScreen(viewModel: GameViewModel, onOpenRegister: () -> Unit = {}) {
 
     // 가족이 1명 이상 준비되고 진행 중인 문제가 없으면 자동으로 시작한다.
     // (앱 첫 실행 시 씨딩이 끝난 뒤, 또는 가족 등록 화면에서 돌아왔을 때 자동 시작)
-    // 화면이 나타난 직후 바로 시작하지 않고 1초 뒤에 질문을 시작한다.
+    // 사진 그리드는 즉시 보여주고, 질문 소리만 1초 뒤에 재생한다(지연은 startGame 내부).
     LaunchedEffect(memberCount, currentSet.isEmpty()) {
         if (memberCount >= 1 && currentSet.isEmpty()) {
-            delay(1000)
             viewModel.startGame()
         }
     }
