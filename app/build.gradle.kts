@@ -20,11 +20,10 @@ android {
 
     buildTypes {
         release {
-            // R8 코드 축소 + 리소스 축소로 릴리스 APK 크기를 줄인다.
-            // (리소스 축소는 코드 축소가 켜져 있어야 동작한다.)
-            // ⚠️ 기기에서 릴리스 빌드 동작 검증 필요 — 여기서는 빌드(R8) 통과까지만 확인했다.
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // R8 코드 축소·리소스 축소는 현재 꺼 둔다(기기에서의 릴리스 동작 검증 전까지 비활성).
+            // proguard-rules.pro는 남겨 두어 나중에 다시 켤 때 바로 쓸 수 있게 한다.
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
