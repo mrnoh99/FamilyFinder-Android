@@ -84,7 +84,6 @@ fun GameScreen(viewModel: GameViewModel) {
     val selectedMemberId by viewModel.selectedMemberId.collectAsStateWithLifecycle()
     val resultPlaying by viewModel.resultPlaying.collectAsStateWithLifecycle()
 
-    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val answered = gameResult != GameResult.NONE
 
     // 가족이 4명 이상 준비되고 진행 중인 문제가 없으면 자동으로 시작한다.
@@ -122,37 +121,10 @@ fun GameScreen(viewModel: GameViewModel) {
                 }
             }
 
-            isLandscape -> {
-                // 가로 모드: 제목 아래에 사진을 한 줄(1x4)로 나란히 배치
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    GameTitle()
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (currentSet.size == 4 && targetMember != null) {
-                            PhotoRowStrip(
-                                members = currentSet,
-                                selectedMemberId = selectedMemberId,
-                                targetMemberId = targetMember!!.id,
-                                gameResult = gameResult,
-                                onSelectMember = viewModel::selectMember
-                            )
-                        }
-                    }
-                }
-            }
-
             else -> {
-                // 세로 모드: 위에서 아래로 컨트롤 + 2x2 그리드
+                // 세로/가로 모두: 위에서 아래로 컨트롤 + 2x2 그리드.
+                // 방향이 바뀌어도 2x2 그리드와 각 패널의 1:1 비율을 그대로 유지해
+                // 사진의 좌우 비율이 변하지 않는다.
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -448,8 +420,10 @@ fun FeedbackCard(result: GameResult) {
 }
 
 /**
- * 사용 가능한 공간 안에서 2x2 그리드를 항상 정사각형으로 맞춘다. 세로/가로 어느 방향이든
- * min(가로, 세로) 변을 한 변으로 하는 정사각 영역에 그려 카드가 찌그러지지 않는다.
+ * 사용 가능한 공간 안에서 2x2 그리드를 항상 정사각형으로 맞춘다. 세로/가로(태블릿 포함)
+ * 어느 방향이든 min(가로, 세로) 변을 한 변으로 하는 정사각 영역을 잡은 뒤, 각 셀 크기를
+ * (변 - 간격) / 2 로 **직접 계산해 size()로 고정**한다. weight + aspectRatio 조합은 기기/제약
+ * 조건에 따라 셀이 1:1로 안 떨어지는 경우가 있어, 명시적 크기로 모든 기기에서 1:1을 보장한다.
  */
 @Composable
 fun SquarePhotoGrid(
@@ -460,82 +434,27 @@ fun SquarePhotoGrid(
     onSelectMember: (FamilyMember) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val gap = 10.dp
     BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.Center) {
         val side = minOf(maxWidth, maxHeight)
-        PhotoGrid(
-            members = members,
-            selectedMemberId = selectedMemberId,
-            targetMemberId = targetMemberId,
-            gameResult = gameResult,
-            onSelectMember = onSelectMember,
-            modifier = Modifier.size(side)
-        )
-    }
-}
-
-/**
- * 가로 모드 전용: 사진을 한 줄(1xN)로 나란히 배치한다. 각 사진은 정사각형으로,
- * 사용 가능한 높이와 너비에 맞춰 크기를 정해 화면 밖으로 넘치지 않게 한다.
- */
-@Composable
-fun PhotoRowStrip(
-    members: List<FamilyMember>,
-    selectedMemberId: Int?,
-    targetMemberId: Int,
-    gameResult: GameResult,
-    onSelectMember: (FamilyMember) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.Center) {
-        val gap = 10.dp
-        val count = members.size.coerceAtLeast(1)
-        val side = minOf(maxHeight, (maxWidth - gap * (count - 1)) / count)
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(gap),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.height(side)
+        val cell = ((side - gap) / 2).coerceAtLeast(0.dp)
+        Column(
+            verticalArrangement = Arrangement.spacedBy(gap)
         ) {
-            members.forEach { member ->
-                PhotoCard(
-                    member = member,
-                    isSelected = selectedMemberId == member.id,
-                    isTarget = targetMemberId == member.id,
-                    gameResult = gameResult,
-                    onClick = { onSelectMember(member) },
-                    modifier = Modifier.fillMaxHeight()
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun PhotoGrid(
-    members: List<FamilyMember>,
-    selectedMemberId: Int?,
-    targetMemberId: Int,
-    gameResult: GameResult,
-    onSelectMember: (FamilyMember) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = modifier.fillMaxWidth()
-    ) {
-        members.chunked(2).forEach { rowMembers ->
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                rowMembers.forEach { member ->
-                    PhotoCard(
-                        member = member,
-                        isSelected = selectedMemberId == member.id,
-                        isTarget = targetMemberId == member.id,
-                        gameResult = gameResult,
-                        onClick = { onSelectMember(member) },
-                        modifier = Modifier.weight(1f)
-                    )
+            members.chunked(2).forEach { rowMembers ->
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(gap)
+                ) {
+                    rowMembers.forEach { member ->
+                        PhotoCard(
+                            member = member,
+                            isSelected = selectedMemberId == member.id,
+                            isTarget = targetMemberId == member.id,
+                            gameResult = gameResult,
+                            onClick = { onSelectMember(member) },
+                            modifier = Modifier.size(cell)
+                        )
+                    }
                 }
             }
         }
