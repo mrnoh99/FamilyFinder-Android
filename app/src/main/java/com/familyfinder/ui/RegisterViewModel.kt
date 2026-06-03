@@ -24,6 +24,8 @@ import kotlin.math.roundToInt
 
 class RegisterViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val tag = "RegisterViewModel"
+
     private val repository = FamilyRepository(
         FamilyDatabase.getDatabase(application).familyDao()
     )
@@ -237,7 +239,11 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
 
         if (rel.isEmpty() || photoUri == null || questionPath == null ||
             correctPath == null || incorrectPath == null
-        ) return
+        ) {
+            _recordingError.value = "저장할 수 없습니다. 관계·사진·음성을 모두 완료해 주세요."
+            android.util.Log.w(tag, "saveMember called with incomplete fields")
+            return
+        }
 
         val editingId = _editingId.value
 
@@ -252,6 +258,8 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
                         output.compress(Bitmap.CompressFormat.JPEG, 90, fos)
                     }
                     true
+                }.onFailure { e ->
+                    android.util.Log.e(tag, "Photo crop/save failed", e)
                 }.getOrDefault(false)
             }
             if (!ok) {
@@ -261,6 +269,8 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
                         context.contentResolver.openInputStream(photoUri)?.use { input ->
                             photoFile.outputStream().use { output -> input.copyTo(output) }
                         }
+                    }.onFailure { e ->
+                        android.util.Log.e(tag, "Photo copy fallback failed", e)
                     }
                 }
             }
@@ -298,6 +308,8 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
         val uri = _photoUri.value ?: return
         if (photoBoxSizePx <= 0) return
         val context = getApplication<Application>()
+        // Remember the previous URI so we can clean up its cache file after replacement.
+        val prevCacheFile = cacheFileOf(context, uri)
         viewModelScope.launch {
             val croppedUri = withContext(Dispatchers.IO) {
                 runCatching {
@@ -309,12 +321,22 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
                         output.compress(Bitmap.CompressFormat.JPEG, 90, fos)
                     }
                     Uri.fromFile(file)
+                }.onFailure { e ->
+                    android.util.Log.e(tag, "applyPhotoCrop failed", e)
                 }.getOrNull()
             }
             if (croppedUri != null) {
+                prevCacheFile?.delete()
                 _photoUri.value = croppedUri
             }
         }
+    }
+
+    /** Returns the File if [uri] points to a file inside the app's cacheDir, otherwise null. */
+    private fun cacheFileOf(context: Application, uri: Uri): File? {
+        val path = uri.path ?: return null
+        val file = File(path)
+        return if (file.canonicalPath.startsWith(context.cacheDir.canonicalPath)) file else null
     }
 
     /** Uri에서 비트맵을 디코드하고 EXIF 방향대로 회전시켜 바로 세운다. (OOM 방지 다운샘플링 포함) */

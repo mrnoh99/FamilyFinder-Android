@@ -32,6 +32,8 @@ import kotlinx.coroutines.withContext
  */
 class WavRecorder(@Suppress("unused") private val context: Context) {
 
+    private val tag = "WavRecorder"
+
     private val sampleRate = 44_100
     // Per-sample floor used as a minimum speech threshold.
     private val minSpeechPeak = 550
@@ -75,14 +77,16 @@ class WavRecorder(@Suppress("unused") private val context: Context) {
                 encoding,
                 minBuf,
             )
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.e(tag, "AudioRecord creation failed", e)
             null
         }
 
         // Bail out cleanly if the mic could not be acquired (e.g. permission revoked
         // or device busy) instead of silently leaving the UI in a recording state.
         if (record == null || record.state != AudioRecord.STATE_INITIALIZED) {
-            try { record?.release() } catch (_: Exception) {}
+            android.util.Log.w(tag, "AudioRecord not initialized (state=${record?.state})")
+            try { record?.release() } catch (e: Exception) { android.util.Log.w(tag, "release failed", e) }
             audioRecord = null
             return false
         }
@@ -90,8 +94,9 @@ class WavRecorder(@Suppress("unused") private val context: Context) {
 
         try {
             record.startRecording()
-        } catch (_: Exception) {
-            try { record.release() } catch (_: Exception) {}
+        } catch (e: Exception) {
+            android.util.Log.e(tag, "startRecording failed", e)
+            try { record.release() } catch (re: Exception) { android.util.Log.w(tag, "release failed", re) }
             audioRecord = null
             return false
         }
@@ -130,20 +135,23 @@ class WavRecorder(@Suppress("unused") private val context: Context) {
 
         try {
             job?.join()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.w(tag, "recordJob join interrupted", e)
         }
 
         withContext(Dispatchers.IO) {
             if (record != null) {
                 try {
                     record.stop()
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    android.util.Log.w(tag, "AudioRecord stop failed", e)
                 }
                 val buf = ByteArray(recordBufferSize.coerceAtLeast(1))
                 while (true) {
                     val readBytes = try {
                         record.read(buf, 0, buf.size)
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
+                        android.util.Log.w(tag, "Drain read failed", e)
                         break
                     }
                     if (readBytes <= 0) break
@@ -153,7 +161,8 @@ class WavRecorder(@Suppress("unused") private val context: Context) {
                 }
                 try {
                     record.release()
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    android.util.Log.w(tag, "AudioRecord release failed", e)
                 }
             }
             audioRecord = null
@@ -206,7 +215,8 @@ class WavRecorder(@Suppress("unused") private val context: Context) {
         return try {
             writeWav16MonoPcm(file = outFile, pcm16 = enhanced, sampleRate = sampleRate)
             true
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.e(tag, "WAV write failed: ${outFile.name}", e)
             false
         }
     }

@@ -157,8 +157,6 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
         ActivityResultContracts.TakePicture()
     ) { success: Boolean -> if (success) cameraUri?.let { viewModel.setPhotoUri(it) } }
 
-    LaunchedEffect(Unit) { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
-
     LaunchedEffect(saveSuccess) {
         if (saveSuccess) {
             showForm = false
