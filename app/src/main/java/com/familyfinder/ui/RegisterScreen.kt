@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -199,13 +200,13 @@ fun RegisterScreen(viewModel: RegisterViewModel) {
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-            val missing = buildList {
-                if (relationship.isBlank()) add("관계")
-                if (photoUri == null) add("사진")
-                if (questionAudioPath == null) add("질문 녹음")
-                if (correctAudioPath == null) add("정답 반응(공통)")
-                if (incorrectAudioPath == null) add("오답 반응(공통)")
-            }
+            val missing = RegisterViewModel.missingFields(
+                relationship = relationship,
+                hasPhoto = photoUri != null,
+                hasQuestion = questionAudioPath != null,
+                hasCorrect = correctAudioPath != null,
+                hasIncorrect = incorrectAudioPath != null,
+            )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -713,26 +714,35 @@ fun RecordingButton(
             DisposableEffect(audioPath) {
                 onDispose { player?.release(); player = null }
             }
-
+            val isPlaying = player != null
             IconButton(
                 onClick = {
-                    player?.release()
-                    val mp = MediaPlayer()
-                    player = mp
-                    try {
-                        mp.setOnPreparedListener { it.start() }
-                        mp.setOnCompletionListener { it.release(); player = null }
-                        mp.setOnErrorListener { p, _, _ -> p.release(); player = null; true }
-                        mp.setDataSource(audioPath)
-                        mp.prepareAsync()
-                    } catch (e: Exception) {
-                        android.util.Log.e("RecordingButton", "Audio setup failed", e)
-                        mp.release()
+                    if (isPlaying) {
+                        player?.release()
                         player = null
+                    } else {
+                        val mp = MediaPlayer()
+                        player = mp
+                        try {
+                            mp.setOnPreparedListener { it.start() }
+                            mp.setOnCompletionListener { it.release(); player = null }
+                            mp.setOnErrorListener { p, _, _ -> p.release(); player = null; true }
+                            mp.setDataSource(audioPath)
+                            mp.prepareAsync()
+                        } catch (e: Exception) {
+                            android.util.Log.e("RecordingButton", "Audio setup failed", e)
+                            mp.release()
+                            player = null
+                        }
                     }
                 }
             ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = "재생", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
+                Icon(
+                    imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
+                    contentDescription = if (isPlaying) "정지" else "재생",
+                    tint = if (isPlaying) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp)
+                )
             }
         }
     }

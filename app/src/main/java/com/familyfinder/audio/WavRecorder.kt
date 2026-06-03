@@ -4,9 +4,9 @@ import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
 import androidx.annotation.WorkerThread
+import com.familyfinder.data.WavWriter
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
@@ -213,7 +213,7 @@ class WavRecorder(@Suppress("unused") private val context: Context) {
         val enhanced = enhanceSpeechClip(trimmed)
 
         return try {
-            writeWav16MonoPcm(file = outFile, pcm16 = enhanced, sampleRate = sampleRate)
+            WavWriter.write16Mono(file = outFile, pcm16 = enhanced, sampleRate = sampleRate)
             true
         } catch (e: Exception) {
             android.util.Log.e(tag, "WAV write failed: ${outFile.name}", e)

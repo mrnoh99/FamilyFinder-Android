@@ -425,4 +425,20 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
         super.onCleared()
         recorder.release()
     }
+
+    companion object {
+        internal fun missingFields(
+            relationship: String,
+            hasPhoto: Boolean,
+            hasQuestion: Boolean,
+            hasCorrect: Boolean,
+            hasIncorrect: Boolean,
+        ): List<String> = buildList {
+            if (relationship.isBlank()) add("관계")
+            if (!hasPhoto) add("사진")
+            if (!hasQuestion) add("질문 녹음")
+            if (!hasCorrect) add("정답 반응(공통)")
+            if (!hasIncorrect) add("오답 반응(공통)")
+        }
+    }
 }

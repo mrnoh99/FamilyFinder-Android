@@ -163,4 +163,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
         mediaPlayer?.release()
     }
+
+    companion object {
+        internal fun determineResult(selectedId: Int, targetId: Int): GameResult =
+            if (selectedId == targetId) GameResult.CORRECT else GameResult.INCORRECT
+    }
 }

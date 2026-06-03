@@ -2,9 +2,6 @@ package com.familyfinder.data
 
 import android.content.Context
 import java.io.File
-import java.io.FileOutputStream
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import kotlin.math.PI
 import kotlin.math.min
 import kotlin.math.sin
@@ -55,36 +52,6 @@ object CueSounds {
                 )
             }
         }
-        writeWav16Mono(file, out.toShortArray(), SAMPLE_RATE)
-    }
-
-    private fun writeWav16Mono(file: File, pcm16: ShortArray, sampleRate: Int) {
-        val dataSize = pcm16.size * 2
-        val header = ByteArray(44)
-        var idx = 0
-        fun putString(s: String) { for (b in s.toByteArray(Charsets.US_ASCII)) header[idx++] = b }
-        fun putIntLE(v: Int) {
-            header[idx++] = (v and 0xFF).toByte()
-            header[idx++] = ((v shr 8) and 0xFF).toByte()
-            header[idx++] = ((v shr 16) and 0xFF).toByte()
-            header[idx++] = ((v shr 24) and 0xFF).toByte()
-        }
-        fun putShortLE(v: Int) {
-            header[idx++] = (v and 0xFF).toByte()
-            header[idx++] = ((v shr 8) and 0xFF).toByte()
-        }
-        putString("RIFF"); putIntLE(36 + dataSize); putString("WAVE")
-        putString("fmt "); putIntLE(16); putShortLE(1); putShortLE(1)
-        putIntLE(sampleRate); putIntLE(sampleRate * 2); putShortLE(2); putShortLE(16)
-        putString("data"); putIntLE(dataSize)
-
-        if (file.exists()) file.delete()
-        FileOutputStream(file).use { fos ->
-            fos.write(header)
-            val bb = ByteBuffer.allocate(dataSize).order(ByteOrder.LITTLE_ENDIAN)
-            for (s in pcm16) bb.putShort(s)
-            fos.write(bb.array())
-            fos.flush()
-        }
+        WavWriter.write16Mono(file, out.toShortArray(), SAMPLE_RATE)
     }
 }
