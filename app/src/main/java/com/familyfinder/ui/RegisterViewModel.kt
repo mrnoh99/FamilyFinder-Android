@@ -326,7 +326,11 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
                 }.getOrNull()
             }
             if (croppedUri != null) {
-                prevCacheFile?.delete()
+                try {
+                    prevCacheFile?.delete()
+                } catch (e: Exception) {
+                    android.util.Log.w(tag, "Failed to delete previous crop cache file", e)
+                }
                 _photoUri.value = croppedUri
             }
         }

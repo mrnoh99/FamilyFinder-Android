@@ -66,6 +66,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -707,16 +708,27 @@ fun RecordingButton(
         }
 
         if (hasRecording && audioPath != null && !isCurrentlyRecording) {
+            // Single player instance per RecordingButton: prevents duplicate playback.
+            var player by remember { mutableStateOf<MediaPlayer?>(null) }
+            DisposableEffect(audioPath) {
+                onDispose { player?.release(); player = null }
+            }
+
             IconButton(
                 onClick = {
+                    player?.release()
                     val mp = MediaPlayer()
+                    player = mp
                     try {
+                        mp.setOnPreparedListener { it.start() }
+                        mp.setOnCompletionListener { it.release(); player = null }
+                        mp.setOnErrorListener { p, _, _ -> p.release(); player = null; true }
                         mp.setDataSource(audioPath)
-                        mp.prepare()
-                        mp.start()
-                        mp.setOnCompletionListener { it.release() }
+                        mp.prepareAsync()
                     } catch (e: Exception) {
+                        android.util.Log.e("RecordingButton", "Audio setup failed", e)
                         mp.release()
+                        player = null
                     }
                 }
             ) {

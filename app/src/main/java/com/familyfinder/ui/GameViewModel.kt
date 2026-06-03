@@ -101,12 +101,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun playQuestion() {
-        val target = _targetMember.value ?: return
-        _questionPlaying.value = true
-        playAudio(target.questionAudioPath) { _questionPlaying.value = false }
-    }
-
     fun selectMember(member: FamilyMember) {
         // 질문 음성이 끝나기 전이거나 이미 답한 경우 무시
         if (_questionPlaying.value) return
@@ -138,15 +132,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         mediaPlayer?.release()
         mediaPlayer = null
 
+        val mp = MediaPlayer()
+        mediaPlayer = mp
         try {
-            val mp = MediaPlayer()
-            mediaPlayer = mp
             mp.setOnCompletionListener { p ->
                 if (mediaPlayer === p) mediaPlayer = null
                 p.release()
                 onDone()
             }
-            mp.setOnErrorListener { p, _, _ ->
+            mp.setOnErrorListener { p, what, extra ->
+                android.util.Log.w("GameViewModel", "MediaPlayer error what=$what extra=$extra")
                 if (mediaPlayer === p) mediaPlayer = null
                 p.release()
                 onDone()
@@ -156,7 +151,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             mp.prepare()
             mp.start()
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e("GameViewModel", "playAudio failed: $path", e)
+            // Release and clear the reference that was set before the exception.
+            mediaPlayer?.release()
+            mediaPlayer = null
             onDone()
         }
     }
