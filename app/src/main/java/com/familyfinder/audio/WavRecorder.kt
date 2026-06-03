@@ -353,7 +353,7 @@ class WavRecorder(@Suppress("unused") private val context: Context) {
         if (peak == 0) return input
 
         val targetPeak = (Short.MAX_VALUE * 0.92).toInt()
-        val gain = (targetPeak.toDouble() / peak).coerceIn(1.25, 4.0)
+        val gain = (targetPeak.toDouble() / peak).coerceIn(1.0, 4.0)
         return ShortArray(input.size) { index ->
             (input[index] * gain).toInt()
                 .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())

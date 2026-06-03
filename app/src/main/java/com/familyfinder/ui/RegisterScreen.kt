@@ -712,7 +712,14 @@ fun RecordingButton(
             // Single player instance per RecordingButton: prevents duplicate playback.
             var player by remember { mutableStateOf<MediaPlayer?>(null) }
             DisposableEffect(audioPath) {
-                onDispose { player?.release(); player = null }
+                onDispose {
+                    val mp = player
+                    player = null
+                    mp?.setOnPreparedListener(null)
+                    mp?.setOnCompletionListener(null)
+                    mp?.setOnErrorListener(null)
+                    mp?.release()
+                }
             }
             val isPlaying = player != null
             IconButton(
@@ -720,6 +727,7 @@ fun RecordingButton(
                     if (isPlaying) {
                         val mp = player
                         player = null
+                        mp?.setOnPreparedListener(null)
                         mp?.setOnCompletionListener(null)
                         mp?.setOnErrorListener(null)
                         mp?.release()
@@ -727,9 +735,9 @@ fun RecordingButton(
                         val mp = MediaPlayer()
                         player = mp
                         try {
-                            mp.setOnPreparedListener { it.start() }
-                            mp.setOnCompletionListener { it.release(); player = null }
-                            mp.setOnErrorListener { p, _, _ -> p.release(); player = null; true }
+                            mp.setOnPreparedListener { p -> if (player === p) p.start() else p.release() }
+                            mp.setOnCompletionListener { p -> if (player === p) player = null; p.release() }
+                            mp.setOnErrorListener { p, _, _ -> if (player === p) player = null; p.release(); true }
                             mp.setDataSource(audioPath)
                             mp.prepareAsync()
                         } catch (e: Exception) {

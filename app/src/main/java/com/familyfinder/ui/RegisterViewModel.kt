@@ -263,15 +263,20 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
                 }.getOrDefault(false)
             }
             if (!ok) {
-                // 크롭 실패 시에도 등록이 막히지 않도록 원본을 그대로 복사한다.
-                withContext(Dispatchers.IO) {
+                // 크롭 실패 시 원본을 그대로 복사한다.
+                val copied = withContext(Dispatchers.IO) {
                     runCatching {
                         context.contentResolver.openInputStream(photoUri)?.use { input ->
                             photoFile.outputStream().use { output -> input.copyTo(output) }
-                        }
+                        } != null
                     }.onFailure { e ->
                         android.util.Log.e(tag, "Photo copy fallback failed", e)
-                    }
+                    }.getOrDefault(false)
+                }
+                if (!copied || !photoFile.exists() || photoFile.length() == 0L) {
+                    _recordingError.value = "사진을 저장할 수 없습니다. 다시 시도해 주세요."
+                    android.util.Log.e(tag, "Photo unavailable after crop and fallback; aborting save")
+                    return@launch
                 }
             }
 
