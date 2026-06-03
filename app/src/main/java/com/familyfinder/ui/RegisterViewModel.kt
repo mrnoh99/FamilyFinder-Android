@@ -14,6 +14,7 @@ import com.familyfinder.data.FamilyMember
 import com.familyfinder.data.FamilyRepository
 import com.familyfinder.data.TtsSynthesizer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -69,6 +70,7 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
     private val recorder = WavRecorder(application)
     private var pendingType: RecordingType? = null
     private var pendingFile: File? = null
+    private var cropJob: Job? = null
 
     // 정답/오답 반응은 모든 가족 공통이라 앱 내부에 한 번만 녹음해 재사용한다.
     private val globalCorrectFile = File(application.filesDir, "global_correct.wav")
@@ -315,7 +317,8 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
         val context = getApplication<Application>()
         // Remember the previous URI so we can clean up its cache file after replacement.
         val prevCacheFile = cacheFileOf(context, uri)
-        viewModelScope.launch {
+        cropJob?.cancel()
+        cropJob = viewModelScope.launch {
             val croppedUri = withContext(Dispatchers.IO) {
                 runCatching {
                     val src = loadOrientedBitmap(uri) ?: return@runCatching null
