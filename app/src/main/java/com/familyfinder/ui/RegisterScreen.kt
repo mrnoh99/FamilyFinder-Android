@@ -718,8 +718,11 @@ fun RecordingButton(
             IconButton(
                 onClick = {
                     if (isPlaying) {
-                        player?.release()
+                        val mp = player
                         player = null
+                        mp?.setOnCompletionListener(null)
+                        mp?.setOnErrorListener(null)
+                        mp?.release()
                     } else {
                         val mp = MediaPlayer()
                         player = mp

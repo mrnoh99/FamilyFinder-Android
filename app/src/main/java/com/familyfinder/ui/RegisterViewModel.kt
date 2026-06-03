@@ -340,7 +340,7 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
     private fun cacheFileOf(context: Application, uri: Uri): File? {
         val path = uri.path ?: return null
         val file = File(path)
-        return if (file.canonicalPath.startsWith(context.cacheDir.canonicalPath)) file else null
+        return if (file.canonicalPath.startsWith(context.cacheDir.canonicalPath + File.separator)) file else null
     }
 
     /** Uri에서 비트맵을 디코드하고 EXIF 방향대로 회전시켜 바로 세운다. (OOM 방지 다운샘플링 포함) */
@@ -407,12 +407,13 @@ class RegisterViewModel(application: Application) : AndroidViewModel(application
         _saveSuccess.value = false
     }
 
-    fun canSave(): Boolean =
-        _relationship.value.isNotBlank() &&
-        _photoUri.value != null &&
-        _questionAudioPath.value != null &&
-        _correctAudioPath.value != null &&
-        _incorrectAudioPath.value != null
+    fun canSave(): Boolean = missingFields(
+        relationship = _relationship.value,
+        hasPhoto = _photoUri.value != null,
+        hasQuestion = _questionAudioPath.value != null,
+        hasCorrect = _correctAudioPath.value != null,
+        hasIncorrect = _incorrectAudioPath.value != null,
+    ).isEmpty()
 
     private fun resetForm() {
         // 정답/오답 반응은 모든 가족 공통이므로 유지하고, 가족별 항목만 비운다.

@@ -135,6 +135,8 @@ class WavRecorder(@Suppress("unused") private val context: Context) {
 
         try {
             job?.join()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             android.util.Log.w(tag, "recordJob join interrupted", e)
         }
@@ -359,54 +361,4 @@ class WavRecorder(@Suppress("unused") private val context: Context) {
         }
     }
 
-    private fun writeWav16MonoPcm(file: File, pcm16: ShortArray, sampleRate: Int) {
-        val dataSize = pcm16.size * 2
-        val riffSize = 36 + dataSize
-
-        val header = ByteArray(44)
-        var idx = 0
-
-        fun putString(s: String) {
-            val bytes = s.toByteArray(Charsets.US_ASCII)
-            for (b in bytes) header[idx++] = b
-        }
-
-        fun putIntLE(v: Int) {
-            header[idx++] = (v and 0xFF).toByte()
-            header[idx++] = ((v shr 8) and 0xFF).toByte()
-            header[idx++] = ((v shr 16) and 0xFF).toByte()
-            header[idx++] = ((v shr 24) and 0xFF).toByte()
-        }
-
-        fun putShortLE(v: Int) {
-            header[idx++] = (v and 0xFF).toByte()
-            header[idx++] = ((v shr 8) and 0xFF).toByte()
-        }
-
-        putString("RIFF")
-        putIntLE(riffSize)
-        putString("WAVE")
-        putString("fmt ")
-        putIntLE(16) // PCM chunk size
-        putShortLE(1) // AudioFormat PCM=1
-        putShortLE(1) // channels mono
-        putIntLE(sampleRate)
-        val byteRate = sampleRate * 1 * 16 / 8
-        putIntLE(byteRate)
-        val blockAlign = 1 * 16 / 8
-        putShortLE(blockAlign)
-        putShortLE(16) // bits per sample
-        putString("data")
-        putIntLE(dataSize)
-
-        if (file.exists()) file.delete()
-
-        FileOutputStream(file).use { fos ->
-            fos.write(header)
-            val bb = ByteBuffer.allocate(pcm16.size * 2).order(ByteOrder.LITTLE_ENDIAN)
-            for (s in pcm16) bb.putShort(s)
-            fos.write(bb.array())
-            fos.flush()
-        }
-    }
 }

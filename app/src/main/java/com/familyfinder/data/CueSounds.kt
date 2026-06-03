@@ -32,7 +32,7 @@ object CueSounds {
     }
 
     /** segments: (주파수Hz, 길이ms). 주파수 0이면 무음. */
-    private fun writeTones(file: File, segments: List<Pair<Double, Int>>) {
+    internal fun writeTones(file: File, segments: List<Pair<Double, Int>>) {
         val out = ArrayList<Short>()
         for ((freq, ms) in segments) {
             val n = SAMPLE_RATE * ms / 1000

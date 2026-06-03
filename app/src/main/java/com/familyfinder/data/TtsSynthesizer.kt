@@ -7,9 +7,6 @@ import android.speech.tts.UtteranceProgressListener
 import java.io.File
 import java.util.Locale
 import kotlin.coroutines.resume
-import kotlin.math.PI
-import kotlin.math.min
-import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -79,20 +76,7 @@ object TtsSynthesizer {
             }
         } ?: false
 
-    private fun writeBeepWav(file: File, freq: Double, durationMs: Int = 600, sampleRate: Int = 22_050) {
-        val total = sampleRate * durationMs / 1000
-        val fade = min(total / 8, sampleRate / 50)
-        val data = ShortArray(total) { i ->
-            val env = when {
-                i < fade -> i.toDouble() / fade
-                i > total - fade -> (total - i).toDouble() / fade
-                else -> 1.0
-            }
-            val sample = sin(2.0 * PI * freq * i / sampleRate) * 0.5 * env
-            (sample * Short.MAX_VALUE).toInt()
-                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-                .toShort()
-        }
-        WavWriter.write16Mono(file, data, sampleRate)
+    private fun writeBeepWav(file: File, freq: Double, durationMs: Int = 600) {
+        CueSounds.writeTones(file, listOf(freq to durationMs))
     }
 }
